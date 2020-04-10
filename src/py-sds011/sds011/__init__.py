@@ -3,7 +3,8 @@
 import struct
 import serial
 
-#TODO: Commands against the sensor should read the reply and return success status.
+# TODO: Commands against the sensor should read the reply and return success status.
+
 
 class SDS011(object):
     """Provides method to read from a SDS011 air particlate density sensor
@@ -55,7 +56,7 @@ class SDS011(object):
         if len(data) == 0:
             return None
         if (sum(d for d in data) & 255) != raw[8]:
-            return None  #TODO: also check cmd id
+            return None  # TODO: also check cmd id
         return raw
 
     def cmd_begin(self):
@@ -91,7 +92,7 @@ class SDS011(object):
 
         raw = self._get_reply()
         if raw is None:
-            return None  #TODO:
+            return None  # TODO:
         data = struct.unpack('<HH', raw[2:6])
         pm25 = data[0] / 10.0
         pm10 = data[1] / 10.0
