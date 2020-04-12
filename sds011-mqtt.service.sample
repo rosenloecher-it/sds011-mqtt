@@ -1,0 +1,13 @@
+[Unit]
+Description=SDS011-MQTT
+
+[Service]
+Type=simple
+ExecStart=/opt/sds011-mqtt/sds011-mqtt.sh -s -p -c /opt/sds011-mqtt/sds011-mqtt.yaml
+Restart=always
+RestartSec=300
+WorkingDirectory=/opt/sds011-mqtt
+User=pi
+
+[Install]
+WantedBy=multi-user.target

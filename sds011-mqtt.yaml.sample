@@ -1,0 +1,67 @@
+# configuration in YAML style!
+#
+# Take care of quotes '". It makes the difference between number and text.
+#
+# only available via command line interface are the followings options
+# - conf_file
+# - log_print
+# - systemd
+
+
+main:
+  # "-p" (== --print) makes logging obsolet (espcically if you running a systemd service)
+  # log_file:             "./enocean_mqtt_bridge.log"
+  log_level:              "debug"  # values: debug, info, warning, error
+  # log_max_bytes:        1048576  # default
+  # log_max_count:        10       # default
+
+  # check USB port with `lsusb` and `dmesg | grep -i "usb"`
+  enocean_port:           "/dev/ttyUSB0"
+
+  # see https://pypi.org/project/paho-mqtt/
+  mqtt_client_id:         "(hostname)-enomqtt-bridge"
+  mqtt_host:              "<your_server>"
+  mqtt_port:              1883  # integer
+  # mqtt_keepalive:       60  # integer
+  # mqtt_protocol:        4  # 3==MQTTv31, (default:) 4==MQTTv311, 5==default/MQTTv5,
+  # mqtt_ssl_ca_certs:    "/etc/mosquitto/certs/ca.crt"
+  # mqtt_insecure_ssl:    True
+  # mqtt_user_name:       "<your_user_name>"
+  # mqtt_user_pwd:        "<your_password>"
+
+
+# copy device settings template; not interpreted directly! (see YAML features)
+device-default: &device-default
+  mqtt_last_will:         '{"VALUE": "OFFLINE", "INFO": "last will"}'
+  mqtt_retain:            True  # should MQTT broker store message
+  mqtt_time_offline:      1200  # integer; time in seconds, after which *this client* sends the last will!
+
+
+devices:
+
+  # define (unique) device name via section
+  winhandle-office:
+    enocean_id:           0x0123456a
+    mqtt_channel:         "smarthome/enocean/winhandle-office"
+    # mqtt_qos:           1  # == default (integer)
+
+    # secific to "Eltako FFG7B-rw" devices; creates JSON
+    # tranform states to: OPEN, CLOSED, TILTED, OFFLINE, ERROR
+    device_class:         "src.device.eltako_ffg7b_device.EltakoFFG7BDevice"
+    # device_class:       "src.device.log_device.LogDevice"  # log out as it is
+    # device_class:       "src.device.generic_device.GenericDevice"  # forward to MQTT as it is
+
+    write_since:          True
+    storage_file:         ./__work__/storage-winhandle-office.yaml
+
+    # enocean lib settings: see https://github.com/kipe/enocean
+    enocean_rorg:         0xf6
+    enocean_func:         0x10
+    enocean_type:         0x00
+
+    # copy default settings here. see YAML features!
+    <<: *device-default
+
+  dummy:
+    # devices without `device_class` (== "~") gets skipped!
+    device_class:         ~

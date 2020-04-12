@@ -1,0 +1,24 @@
+import logging
+
+
+class Constant:
+    APP_NAME = "SDS011 sensor to MQTT Bridge"
+    APP_DESC = "Forwards fin dust measurements to MQTT"
+    APP_VERSION = "0.0.1"
+
+    DEFAULT_CONFFILE = "/etc/sds011-mqtt.conf"
+
+    DEFAULT_LOGLEVEL = logging.INFO
+    DEFAULT_LOG_MAX_BYTES = 1048576
+    DEFAULT_LOG_MAX_COUNT = 10
+    DEFAULT_LOG_PRINT = False
+    DEFAULT_SYSTEMD = False
+
+    DEFAULT_SENSOR_INTERVAL = 180
+    DEFAULT_SENSOR_WARMUP_TIME = 15
+
+    DEFAULT_MQTT_KEEPALIVE = 60
+    DEFAULT_MQTT_PORT = 1883
+    DEFAULT_MQTT_PORT_SSL = 1883
+    DEFAULT_MQTT_PROTOCOL = 4  # 5==MQTTv5, default: 4==MQTTv311, 3==MQTTv31
+    DEFAULT_MQTT_QUALITY = 1
