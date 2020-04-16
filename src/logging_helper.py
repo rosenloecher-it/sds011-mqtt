@@ -1,5 +1,6 @@
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 
 from src.config import ConfMainKey
 
@@ -21,7 +22,7 @@ class LoggingHelper:
         if log_file:
             max_bytes = config[ConfMainKey.LOG_MAX_BYTES.value]
             max_count = config[ConfMainKey.LOG_MAX_COUNT.value]
-            handler = logging.handlers.RotatingFileHandler(
+            handler = RotatingFileHandler(
                 log_file,
                 maxBytes=int(max_bytes),
                 backupCount=int(max_count)

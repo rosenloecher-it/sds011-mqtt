@@ -81,11 +81,11 @@ class Config:
             data = yaml.unsafe_load(stream)
 
         # main section
-        def update_main(section, item_enum):
+        def update_main(config, item_enum):
             item_name = item_enum.value
             value_cli = self._config.get(item_name)
             if value_cli is None:
-                value_file = section.get(item_name)
+                value_file = config.get(item_name)
                 self._config[item_name] = value_file
 
         section = data  # no section
@@ -230,18 +230,18 @@ class Config:
         value_in = config.get(key)
 
         if not isinstance(value_in, type(logging.INFO)):
-            input = str(value_in).lower().strip() if value_in is not None else value_in
-            if input == "debug":
+            log_level = str(value_in).lower().strip() if value_in is not None else value_in
+            if log_level == "debug":
                 value_out = logging.DEBUG
-            elif input == "info":
+            elif log_level == "info":
                 value_out = logging.INFO
-            elif input == "warning":
+            elif log_level == "warning":
                 value_out = logging.WARNING
-            elif input == "error":
+            elif log_level == "error":
                 value_out = logging.ERROR
             else:
-                if input is not None:
-                    print("cannot parse {} ({})!".format(key, input))
+                if log_level is not None:
+                    print("cannot parse {} ({})!".format(key, log_level))
                 value_out = Constant.DEFAULT_LOGLEVEL
 
             config[key] = value_out

@@ -26,7 +26,7 @@ class Process:
     def __del__(self):
         self.close()
 
-    def _shutdown_gracefully(self, sig, frame):
+    def _shutdown_gracefully(self, sig, _frame):
         _logger.debug("shutdown signaled (%s)", sig)
         self._shutdown = True
 
@@ -70,7 +70,7 @@ class Process:
 
         try:
             while not self._shutdown:
-                if not warming_up and counter >= time_warmup and counter < time_measure:
+                if not warming_up and time_warmup <= counter < time_measure:
                     self._sensor_prepare()
                     warming_up = True
                 elif counter > time_measure:
