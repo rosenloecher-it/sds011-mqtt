@@ -34,24 +34,38 @@ class SDS011(object):
     # The work period command ID
     WORK_PERIOD_CMD = b'\x08'
 
-    def __init__(self, serial_port, baudrate=9600, timeout=2,
-                 use_query_mode=True):
-        """Initialise and open serial port.
-        """
-        self.ser = serial.Serial(port=serial_port,
-                                 baudrate=baudrate,
-                                 timeout=timeout)
-        self.ser.flush()
-        self.set_report_mode(active=not use_query_mode)
+    def __init__(self, serial_port, baudrate=9600, timeout=2, use_query_mode=True):
+        """Initialise and open serial port."""
+        self._serial = None
+
+        self._serial_port = serial_port
+        self._baudrate = baudrate
+        self._timeout = timeout
+        self._use_query_mode = use_query_mode
+
+    def open(self):
+        self._serial = serial.Serial(
+            port=self._serial_port,
+            baudrate=self._baudrate,
+            timeout=self._timeout
+        )
+        self._serial.flush()
+        self.set_report_mode(active=not self._use_query_mode)
+
+    def close(self):
+        if self._serial is not None:
+            self._serial.flush()
+            self._serial.close()
+            self._serial = None
 
     def _execute(self, cmd_bytes):
         """Writes a byte sequence to the serial.
         """
-        self.ser.write(cmd_bytes)
+        self._serial.write(cmd_bytes)
 
     def _get_reply(self):
         """Read reply from device."""
-        raw = self.ser.read(size=10)
+        raw = self._serial.read(size=10)
         data = raw[2:8]
         if len(data) == 0:
             return None
@@ -164,8 +178,8 @@ class SDS011(object):
         """
         byte = 0
         while byte != self.HEAD:
-            byte = self.ser.read(size=1)
-            d = self.ser.read(size=10)
+            byte = self._serial.read(size=1)
+            d = self._serial.read(size=10)
             if d[0:1] == b"\xc0":
                 data = self._process_frame(byte + d)
                 return data
