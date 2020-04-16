@@ -38,8 +38,7 @@ class Process:
         self._mqtt = MqttConnector()
         self._mqtt.open(self._config)
 
-        self._sensor = Sensor()
-        self._sensor.open(self._config)
+        self._sensor = Sensor(self._config)
         self._sensor.set_mqtt(self._mqtt)
 
     def close(self):
@@ -63,7 +62,7 @@ class Process:
         warming_up = False
 
         while not self._shutdown:
-            # make sure mqtt is connected
+            # make sure mqtt was connected - notified via callback
             time.sleep(time_step)
             counter += time_step
             if self._mqtt.is_open():
@@ -72,13 +71,11 @@ class Process:
         try:
             while not self._shutdown:
                 if not warming_up and counter >= time_warmup and counter < time_measure:
-                    self._sensor.warmup()
+                    self._sensor_prepare()
                     warming_up = True
                 elif counter > time_measure:
                     warming_up = False
-                    self._sensor.measure()
-                    self._sensor.publish()
-                    self._sensor.sleep()
+                    self._sensor_measure_and_sleep()
                     counter = 0
 
                 time.sleep(time_step)
@@ -89,3 +86,15 @@ class Process:
             _logger.debug("finishing...")
         finally:
             self.close()
+
+    def _sensor_prepare(self):
+        """Sensor prepare """
+        self._sensor.open(warmup=True)
+        pass
+
+    def _sensor_measure_and_sleep(self):
+        try:
+            self._sensor.measure()
+            self._sensor.publish()
+        finally:
+            self._sensor.close()  # includes sleep

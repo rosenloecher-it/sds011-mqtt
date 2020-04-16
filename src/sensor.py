@@ -8,7 +8,7 @@ from tzlocal import get_localzone
 from src.config import ConfMainKey
 from src.sds011 import SDS011
 
-_logger = logging.getLogger("sensor")
+_logger = logging.getLogger(__name__)
 
 
 class ExportKey(Enum):
@@ -34,13 +34,19 @@ class StateValue(Enum):
         return state in [cls.CLOSED, cls.OPEN, cls.TILTED]
 
 
+class SensorError(RuntimeError):
+    pass
+
+
 class Sensor:
 
-    def __init__(self):
-        self._mqtt = None
+    def __init__(self, config):
         self._sensor = None
-        self._active = False
+        self._mqtt = None
+        self._warmup = False
         self._measurment = {}
+
+        self._port = config.get(ConfMainKey.SERIAL_PORT.value)
 
     def __del__(self):
         self.close()
@@ -48,30 +54,48 @@ class Sensor:
     def set_mqtt(self, mqtt):
         self._mqtt = mqtt
 
-    def open(self, config):
-        port = config.get(ConfMainKey.SERIAL_PORT.value)
-        self._sensor = SDS011(port, use_query_mode=True)
-        self._active = False  # don't know the state!
+    def open(self, warmup: bool = False):
+        self._sensor = SDS011(self._port, use_query_mode=True)
+        self._sensor.open()
+        self._warmup = False  # don't know the state!
+
+        _logger.debug("opened")
+
+        if warmup:
+            self.warmup()
 
     def close(self):
         if self._sensor is not None:
-            self.sleep()
-            self._sensor = None
+            try:
+                self._sensor.sleep()
+            except Exception as ex:
+                _logger.exception(ex)
+
+            try:
+                self._sensor.close()
+                _logger.debug("closed")
+            except Exception as ex:
+                _logger.exception(ex)
+            finally:
+                self._sensor = None
+                self._warmup = False
 
     def warmup(self):
         self._sensor.sleep(sleep=False)
-        self._active = True
-        _logger.debug("warmup")
+        self._warmup = True
+        _logger.debug("warming up")
 
     def sleep(self):
-        self._active = False
+        self._warmup = False
         if self._sensor:
             self._sensor.sleep()
-            _logger.debug("sleep")
+            _logger.debug("sent to sleep")
 
     def measure(self):
-        if not self._active:
-            raise RuntimeError("warm up sensor before measure!")
+        if self._sensor is None:
+            raise SensorError("sensor was not opened!")
+        if not self._warmup:
+            raise SensorError("sensor was not warmed up before measurement!")
 
         now = self._now()
         m = self._sensor.query()
@@ -85,13 +109,13 @@ class Sensor:
         _logger.info("measurment: %s", self._measurment)
 
     def publish(self, reset_measurment: bool = True):
+        if self._mqtt is None:
+            raise SensorError("no mqtt set!")
         if self._measurment:
             json_text = json.dumps(self._measurment)
             self._mqtt.publish(json_text)
-
         if reset_measurment:
             self._measurment = {}
-        pass
 
     def _now(self):
         """overwrite in test to simulate different times"""
