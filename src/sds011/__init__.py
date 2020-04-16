@@ -1,9 +1,7 @@
 """This module provides an abstraction for the SDS011 air partuclate densiry sensor.
 """
 import struct
-import serial
-
-# TODO: Commands against the sensor should read the reply and return success status.
+import serial  # pyserial
 
 
 class SDS011(object):
@@ -115,8 +113,8 @@ class SDS011(object):
     def sleep(self, read=False, sleep=True):
         """Sleep/Wake up the sensor.
 
-        @param sleep: Whether the device should sleep or work.
-        @type sleep: bool
+        :param bool sleep: Whether the device should sleep or work.
+        :param bool read:
         """
         cmd = self.cmd_begin()
         cmd += (self.SLEEP_CMD
@@ -150,7 +148,8 @@ class SDS011(object):
         cmd += bytes([checksum]) + self.TAIL
         return cmd
 
-    def _process_frame(self, data):
+    @classmethod
+    def prepare_frame(cls, data):
         """Process a SDS011 data frame.
 
         Byte positions:
@@ -181,5 +180,5 @@ class SDS011(object):
             byte = self._serial.read(size=1)
             d = self._serial.read(size=10)
             if d[0:1] == b"\xc0":
-                data = self._process_frame(byte + d)
+                data = self.prepare_frame(byte + d)
                 return data
