@@ -1,7 +1,11 @@
 """This module provides an abstraction for the SDS011 air partuclate densiry sensor.
 """
+import logging
 import struct
 import serial  # pyserial
+
+
+_logger = logging.getLogger(__name__)
 
 
 class SDS011(object):
@@ -52,22 +56,26 @@ class SDS011(object):
 
     def close(self):
         if self._serial is not None:
-            self._serial.flush()
             self._serial.close()
             self._serial = None
 
-    def _execute(self, cmd_bytes):
+    def _execute(self, cmd_bytes, log_info=""):
         """Writes a byte sequence to the serial.
         """
+        _logger.debug("write%s: %s",
+                      "(" + log_info + ")" if log_info else "",
+                      cmd_bytes)
         self._serial.write(cmd_bytes)
 
     def _get_reply(self):
         """Read reply from device."""
         raw = self._serial.read(size=10)
+        _logger.debug("read(_get_reply): %s", raw)
         data = raw[2:8]
         if len(data) == 0:
             return None
         if (sum(d for d in data) & 255) != raw[8]:
+            _logger.error("_get_reply checksum error")
             return None  # TODO: also check cmd id
         return raw
 
@@ -87,7 +95,7 @@ class SDS011(object):
                 + (self.ACTIVE if active else self.PASSIVE)
                 + b"\x00" * 10)
         cmd = self._finish_cmd(cmd)
-        self._execute(cmd)
+        self._execute(cmd, "set_report_mode")
         self._get_reply()
 
     def query(self):
@@ -100,7 +108,7 @@ class SDS011(object):
         cmd += (self.QUERY_CMD
                 + b"\x00" * 12)
         cmd = self._finish_cmd(cmd)
-        self._execute(cmd)
+        self._execute(cmd, "query")
 
         raw = self._get_reply()
         if raw is None:
@@ -122,7 +130,7 @@ class SDS011(object):
                 + (self.SLEEP if sleep else self.WORK)
                 + b"\x00" * 10)
         cmd = self._finish_cmd(cmd)
-        self._execute(cmd)
+        self._execute(cmd, "sleep")
         self._get_reply()
 
     def set_work_period(self, read=False, work_time=0):
@@ -136,7 +144,7 @@ class SDS011(object):
                 + bytes([work_time])
                 + b"\x00" * 10)
         cmd = self._finish_cmd(cmd)
-        self._execute(cmd)
+        self._execute(cmd, "set_work_period")
         self._get_reply()
 
     def _finish_cmd(self, cmd, id1=b"\xff", id2=b"\xff"):
@@ -164,6 +172,7 @@ class SDS011(object):
         raw = struct.unpack('<HHxxBBB', data[2:])
         checksum = sum(v for v in data[2:8]) % 256
         if checksum != data[8]:
+            _logger.warning("checksum(%s) != data[8]: ", checksum)
             return None
         pm25 = raw[0] / 10.0
         pm10 = raw[1] / 10.0
@@ -178,7 +187,9 @@ class SDS011(object):
         byte = 0
         while byte != self.HEAD:
             byte = self._serial.read(size=1)
+            _logger.debug("read(byte): %s", byte)
             d = self._serial.read(size=10)
+            _logger.debug("read(d): %s", d)
             if d[0:1] == b"\xc0":
                 data = self.prepare_frame(byte + d)
                 return data
