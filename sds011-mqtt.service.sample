@@ -8,6 +8,9 @@ Restart=always
 RestartSec=300
 WorkingDirectory=/opt/sds011-mqtt
 User=pi
+# prepare the serial port in case of a Bluetooth connection
+# ExecStartPre=+/usr/bin/rfcomm bind 0 00:11:22:AA:BB:FF 1
+
 
 [Install]
 WantedBy=multi-user.target
