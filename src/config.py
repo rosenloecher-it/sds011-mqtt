@@ -19,6 +19,7 @@ class ConfMainKey(Enum):
     SYSTEMD = "systemd"
     SENSOR_INTERVAL = "sensor_interval"
     SENSOR_WARMUP_TIME = "sensor_warmup_time"
+    SENSOR_MAX_ERRORS_TO_IGNORE = "sensor_max_errors_to_ignore"
 
     MQTT_CHANNEL = "mqtt_channel"
     MQTT_LAST_WILL = "mqtt_last_will"
