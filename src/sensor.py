@@ -141,7 +141,7 @@ class Sensor:
                 self._set_measurment(StateValue.ERROR, None, None)
             else:
                 self._set_measurment(StateValue.OK, pm10=result[1], pm25=result[0])
-            self._error_ignored = 0
+                self._error_ignored = 0
 
     def publish(self, reset_measurment: bool = True):
         if self._mqtt is None:
