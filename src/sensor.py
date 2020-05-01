@@ -50,13 +50,13 @@ class Sensor:
         self._measurment = {}
 
         self._error_ignored = 0
-        self._max_errors_to_ignore = Config.post_process_int(config,
-                                                             ConfMainKey.SENSOR_MAX_ERRORS_TO_IGNORE,
-                                                             self.MAX_ERRORS_TO_IGNORE_DEFAULT)
+        self._max_errors_to_ignore = Config.get_int(config,
+                                                    ConfMainKey.SENSOR_MAX_ERRORS_TO_IGNORE,
+                                                    self.MAX_ERRORS_TO_IGNORE_DEFAULT)
         if self._max_errors_to_ignore < 0:
             self._max_errors_to_ignore = 0xffffffff
 
-        self._port = config.get(ConfMainKey.SERIAL_PORT.value)
+        self._port = Config.get_str(config, ConfMainKey.SERIAL_PORT)
 
     def __del__(self):
         self.close()
@@ -64,15 +64,15 @@ class Sensor:
     def set_mqtt(self, mqtt):
         self._mqtt = mqtt
 
-    def open(self, warmup: bool = False):
+    def open(self, warm_up: bool = False):
         self._sensor = SDS011(self._port, use_query_mode=True)
         self._sensor.open()
         self._warmup = False  # don't know the state!
 
         _logger.debug("opened")
 
-        if warmup:
-            self.warmup()
+        if warm_up:
+            self.warm_up()
 
     def close(self):
         if self._sensor is not None:
@@ -92,11 +92,11 @@ class Sensor:
                 self._sensor = None
                 self._warmup = False
 
-    def warmup(self):
+    def warm_up(self):
         if self._sensor:
             self._sensor.sleep(sleep=False)
             self._warmup = True
-            _logger.debug("warming up")
+            _logger.info("warming up")
 
     def sleep(self):
         self._warmup = False
@@ -133,15 +133,26 @@ class Sensor:
             self._set_measurment(StateValue.ERROR, None, None)
         else:
             if result is None:
+                pm25, pm10 = None, None
+            else:
+                pm25, pm10 = result
+
+            if not self.check_value(pm25) or not self.check_value(pm10):
                 self._error_ignored += 1
                 if self._error_ignored > self._max_errors_to_ignore:
-                    raise SensorError("no measurment (None)!")
+                    raise SensorError(f"{self._error_ignored} wrong measurments!")
 
-                _logger.error("no measurment (None)!")
+                _logger.warning("(ignore) wrong measurment: pm25=%s; pm10=%s!", pm25, pm10)
                 self._set_measurment(StateValue.ERROR, None, None)
             else:
-                self._set_measurment(StateValue.OK, pm10=result[1], pm25=result[0])
+                self._set_measurment(StateValue.OK, pm10=pm10, pm25=pm25)
                 self._error_ignored = 0
+
+    @classmethod
+    def check_value(cls, value):
+        if value is None:
+            return False
+        return 0 < value <= 1000
 
     def publish(self, reset_measurment: bool = True):
         if self._mqtt is None:

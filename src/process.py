@@ -1,6 +1,7 @@
 import logging
 import signal
 import time
+from enum import IntEnum
 
 from src.config import ConfMainKey
 from src.mqtt_connector import MqttConnector
@@ -9,19 +10,38 @@ from src.sensor import Sensor
 _logger = logging.getLogger("process")
 
 
+class SensorState(IntEnum):
+    START = 0
+    WARMING_UP = 1
+    MEASURING = 2
+    COOLING_DOWN = 3
+    WAITING_FOR_RESET = 4
+
+
 class Process:
 
-    def __init__(self):
-        self._config = {}
+    TIME_STEP = 0.05
 
+    DEFAULT_TIME_INTERVAL = 180
+    DEFAULT_TIME_WARM_UP = 20
+    DEFAULT_TIME_COOL_DOWN = 5
+    DEFAULT_COUNT_MEASUREMENTS = 1
+    DEFAULT_TIME_BETWEEN_MEASUREMENT = 5
+
+    def __init__(self):
         self._sensor = None
         self._mqtt = None
         self._shutdown = False
 
+        self._time_counter = 0
+        self._time_interval = self.DEFAULT_TIME_INTERVAL
+        self._time_warm_up = self.DEFAULT_TIME_WARM_UP
+        self._time_cool_down = self.DEFAULT_TIME_COOL_DOWN
+
+        self._on_hold = False
+
         signal.signal(signal.SIGINT, self._shutdown_gracefully)
         signal.signal(signal.SIGTERM, self._shutdown_gracefully)
-
-        _logger.debug("config: %s", self._config)
 
     def __del__(self):
         self.close()
@@ -31,19 +51,27 @@ class Process:
         self._shutdown = True
 
     def open(self, config):
+        _logger.debug("open(%s)", config)
+
         if self._mqtt is not None or self._sensor is not None:
-            raise RuntimeError("initialisation failed!")
+            raise RuntimeError("initialisation alread done!")
 
-        self._config = config
+        def get_config_float(key, default_value):
+            value = config.get(ConfMainKey.SENSOR_INTERVAL.value)
+            return float(value) if value is not None else default_value
+
+        self._time_interval = get_config_float(config, self._time_interval)
+        self._time_warm_up = get_config_float(config, self._time_warm_up)
+        self._time_cool_down = get_config_float(config, self._time_cool_down)
+
         self._mqtt = MqttConnector()
-        self._mqtt.open(self._config)
+        self._mqtt.open(config)
 
-        self._sensor = Sensor(self._config)
+        self._sensor = Sensor(config)
         self._sensor.set_mqtt(self._mqtt)
 
     def close(self):
         if self._mqtt is not None:
-            # device.sent_last_will_disconnect()
             self._mqtt.close()
             self._mqtt = None
 
@@ -51,50 +79,77 @@ class Process:
             self._sensor.close()
             self._sensor = None
 
+    def _wait(self, seconds: float):
+        """time.sleep but overwriteable for tests"""
+        time.sleep(seconds)
+        self._time_counter += seconds
+
+    def _reset_timer(self):
+        """reset time counter - overwriteable for tests"""
+        self._time_counter = 0
+
     def run(self):
-        interval = self._config.get(ConfMainKey.SENSOR_INTERVAL.value)
-        warmup = self._config.get(ConfMainKey.SENSOR_WARMUP_TIME.value)
-        time_warmup = interval
-        time_measure = interval + warmup
-
-        time_step = 0.05
-        counter = time_warmup  # start with measurement
-        warming_up = False
-
-        while not self._shutdown:
-            # make sure mqtt was connected - notified via callback
-            time.sleep(time_step)
-            counter += time_step
-            if self._mqtt.is_open():
-                break
+        state = SensorState.START
 
         try:
+            self._wait_for_mqtt_connection()
+
+            self._reset_timer()  # better testing
             while not self._shutdown:
-                if not warming_up and time_warmup <= counter < time_measure:
-                    self._sensor_prepare()
-                    warming_up = True
-                elif counter > time_measure:
-                    warming_up = False
-                    self._sensor_measure_and_sleep()
-                    counter = 0
+                self._process_mqtt_messages()  # changes: self._on_hold
 
-                time.sleep(time_step)
-                counter += time_step
+                # may be changed dynamically
+                time_cool_down = self._time_warm_up + self._time_cool_down
+                time_reset = self._time_warm_up + self._time_cool_down + self._time_interval
 
-        except KeyboardInterrupt:
-            # gets called without signal-handler
-            _logger.debug("finishing...")
+                if self._on_hold:
+                    if state == SensorState.START:
+                        self._sensor.open(warm_up=False)
+                        self._mqtt.publish_last_will()
+                        state = SensorState.COOLING_DOWN
+                else:
+                    if state == SensorState.START:
+                        self._sensor.open(warm_up=True)
+                        state = SensorState.WARMING_UP
+
+                    if state == SensorState.WARMING_UP and self._time_counter >= self._time_warm_up:
+                        self._sensor.measure()
+                        self._sensor.publish()
+                        state = SensorState.COOLING_DOWN
+
+                if state == SensorState.COOLING_DOWN and self._time_counter >= time_cool_down:
+                    self._sensor.close()  # includes sleep
+                    state = SensorState.WAITING_FOR_RESET
+
+                if self._time_counter >= time_reset:  # any state
+                    self._reset_timer()
+                    state = SensorState.START
+
+                self._wait(self.TIME_STEP)
+
         finally:
             self.close()
 
-    def _sensor_prepare(self):
-        """Sensor prepare """
-        self._sensor.open(warmup=True)
-        pass
+    def _wait_for_mqtt_connection(self):
+        """wait for getting mqtt connect callback called"""
+        self._reset_timer()
 
-    def _sensor_measure_and_sleep(self):
-        try:
-            self._sensor.measure()
-            self._sensor.publish()
-        finally:
-            self._sensor.close()  # includes sleep
+        while not self._shutdown:
+            # make sure mqtt was connected - notified via callback
+            if self._time_counter > 15:
+                raise RuntimeError("Couldn't connect to MQTT, callback was not called!?")
+
+            self._wait(self.TIME_STEP)
+            if self._mqtt.is_open():
+                # self._reset_timer()
+                break
+
+    def _process_mqtt_messages(self):
+        messages = self._mqtt.get_messages()
+        for message in messages:
+            pass
+
+        # TODO
+        # check (notfied) temperatur + humitidy with configured limits
+        # check: on hold
+        # output => self._on_hold

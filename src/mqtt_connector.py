@@ -1,4 +1,6 @@
 import logging
+import threading
+from queue import Queue, Empty
 
 import paho.mqtt.client as mqtt
 
@@ -19,31 +21,31 @@ class MqttConnector:
         self._qos = None
         self._retain = None
 
-    def __del__(self):
-        self.close()
+        self._message_queue = Queue()  # synchronized
+        self._lock = threading.Lock()
 
     def is_open(self):
-        return self._mqtt and self._open
+        with self._lock:
+            return self._mqtt and self._open
 
     def open(self, config):
+        self._channel = Config.get_str(config, ConfMainKey.MQTT_CHANNEL)
+        self._last_will = Config.get_str(config, ConfMainKey.MQTT_LAST_WILL)
+        self._qos = Config.get_int(config, ConfMainKey.MQTT_QUALITY, Constant.DEFAULT_MQTT_QUALITY)
+        self._retain = Config.get_bool(config, ConfMainKey.MQTT_RETAIN, False)
 
-        self._channel = config.get(ConfMainKey.MQTT_CHANNEL.value)
-        self._last_will = config.get(ConfMainKey.MQTT_LAST_WILL.value)
-        self._qos = Config.post_process_int(config, ConfMainKey.MQTT_QUALITY, Constant.DEFAULT_MQTT_QUALITY)
-        self._retain = Config.post_process_bool(config, ConfMainKey.MQTT_RETAIN, False)
-
-        host = config.get(ConfMainKey.MQTT_HOST.value)
-        port = config.get(ConfMainKey.MQTT_PORT.value)
-        protocol = config.get(ConfMainKey.MQTT_PROTOCOL.value)
-        keepalive = config.get(ConfMainKey.MQTT_KEEPALIVE.value)
-        client_id = config.get(ConfMainKey.MQTT_CLIENT_ID.value)
-        ssl_ca_certs = config.get(ConfMainKey.MQTT_SSL_CA_CERTS.value)
-        ssl_certfile = config.get(ConfMainKey.MQTT_SSL_CERTFILE.value)
-        ssl_keyfile = config.get(ConfMainKey.MQTT_SSL_KEYFILE.value)
-        ssl_insecure = config.get(ConfMainKey.MQTT_SSL_INSECURE.value)
+        host = Config.get_str(config, ConfMainKey.MQTT_HOST)
+        port = Config.get_int(config, ConfMainKey.MQTT_PORT)
+        protocol = Config.get_int(config, ConfMainKey.MQTT_PROTOCOL, Constant.DEFAULT_MQTT_PROTOCOL)
+        keepalive = Config.get_int(config, ConfMainKey.MQTT_KEEPALIVE, Constant.DEFAULT_MQTT_KEEPALIVE)
+        client_id = Config.get_str(config, ConfMainKey.MQTT_CLIENT_ID)
+        ssl_ca_certs = Config.get_str(config, ConfMainKey.MQTT_SSL_CA_CERTS)
+        ssl_certfile = Config.get_str(config, ConfMainKey.MQTT_SSL_CERTFILE)
+        ssl_keyfile = Config.get_str(config, ConfMainKey.MQTT_SSL_KEYFILE)
+        ssl_insecure = Config.get_bool(config, ConfMainKey.MQTT_SSL_INSECURE, False)
         is_ssl = ssl_ca_certs or ssl_certfile or ssl_keyfile
-        user_name = config.get(ConfMainKey.MQTT_USER_NAME.value)
-        user_pwd = config.get(ConfMainKey.MQTT_USER_PWD.value)
+        user_name = Config.get_str(config, ConfMainKey.MQTT_USER_NAME)
+        user_pwd = Config.get_str(config, ConfMainKey.MQTT_USER_PWD)
 
         if not port:
             port = Constant.DEFAULT_MQTT_PORT_SSL if is_ssl else Constant.DEFAULT_MQTT_PORT
@@ -61,11 +63,12 @@ class MqttConnector:
                 _logger.info("disabling SSL certificate verification")
                 self._mqtt.tls_insecure_set(True)
 
-        self._mqtt.on_connect = self._on_mqtt_connect
-        self._mqtt.on_disconnect = self._on_mqtt_disconnect
-        self._mqtt.on_publish = self._on_mqtt_publish
+        self._mqtt.on_connect = self._on_connect
+        self._mqtt.on_disconnect = self._on_disconnect
+        self._mqtt.on_message = self._on_message
+        self._mqtt.on_publish = self._on_publish
 
-        self.will_set()
+        self.set_last_will()
 
         if user_name or user_pwd:
             self._mqtt.username_pw_set(user_name, user_pwd)
@@ -74,11 +77,7 @@ class MqttConnector:
 
     def close(self):
         if self._mqtt is not None:
-            if self._last_will:
-                if not self._open:
-                    _logger.error("cannot sent last will (not open)!")
-                else:
-                    self.publish(self._last_will)
+            self.publish_last_will()
 
             self._mqtt.loop_stop()
             self._mqtt.disconnect()
@@ -86,8 +85,27 @@ class MqttConnector:
             self._mqtt = None
             _logger.debug("mqtt closed.")
 
+    def publish_last_will(self):
+        if self._last_will:
+            if not self.is_open():
+                _logger.error("cannot sent last will (not open)!")
+            else:
+                self.publish(self._last_will)
+
+    def get_messages(self):
+        messages = []
+
+        while True:
+            try:
+                message = self._message_queue.get(block=False)
+                messages.append(message)
+            except Empty:
+                break
+
+        return messages
+
     def publish(self, message: str):
-        if not self._open:
+        if not self.is_open:
             raise RuntimeError("mqtt is not connected!")
 
         self._mqtt.publish(
@@ -98,7 +116,7 @@ class MqttConnector:
         )
         _logger.info("publish: %s", message)
 
-    def will_set(self):
+    def set_last_will(self):
         if self._last_will:
             self._mqtt.will_set(
                 topic=self._channel,
@@ -107,24 +125,35 @@ class MqttConnector:
                 retain=self._retain
             )
 
-    def _on_mqtt_connect(self, _mqtt_client, _userdata, flags, rc):
+    def _on_connect(self, _mqtt_client, _userdata, flags, rc):
         """MQTT callback is called when client connects to MQTT server."""
-        if rc == 0:
-            self._open = True
-            _logger.info("successfully connected to MQTT: flags=%s, rc=%s", flags, rc)
-        else:
-            self._open = False
-            _logger.error("connect to MQTT failed: flags=%s, rc=%s", flags, rc)
+        with self._lock:
+            if rc == 0:
+                self._open = True
+                _logger.info("successfully connected to MQTT: flags=%s, rc=%s", flags, rc)
+            else:
+                self._open = False
+                _logger.error("connect to MQTT failed: flags=%s, rc=%s", flags, rc)
 
-    def _on_mqtt_disconnect(self, _mqtt_client, _userdata, rc):
+    def _on_disconnect(self, _mqtt_client, _userdata, rc):
         """MQTT callback for when the client disconnects from the MQTT server."""
-        self._open = False
-        if rc == 0:
-            _logger.info("disconnected from MQTT: rc=%s", rc)
-        else:
-            _logger.error("Unexpectedly disconnected from MQTT broker: rc=%s", rc)
+        with self._lock:
+            self._open = False
+            if rc == 0:
+                _logger.info("disconnected from MQTT: rc=%s", rc)
+            else:
+                _logger.error("Unexpectedly disconnected from MQTT broker: rc=%s", rc)
+
+    def _on_message(self, mqtt_client, userdata, message):
+        """MQTT callback when a message is received from MQTT server"""
+        try:
+            _logger.debug('_on_message: topic="%s" payload="%s"', message.topic, message.payload)
+            if message is not None:
+                self._message_queue.put(message)
+        except Exception as ex:
+            _logger.exception(ex)
 
     @classmethod
-    def _on_mqtt_publish(cls, _mqtt_client, _userdata, mid):
+    def _on_publish(cls, _mqtt_client, _userdata, mid):
         """MQTT callback is invoked when message was successfully sent to the MQTT server."""
         _logger.debug("published message %s", str(mid))

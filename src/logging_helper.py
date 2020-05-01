@@ -2,7 +2,7 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 
-from src.config import ConfMainKey
+from src.config import ConfMainKey, Config
 
 
 class LoggingHelper:
@@ -14,10 +14,10 @@ class LoggingHelper:
         format_with_ts = '%(asctime)s [%(levelname)8s] %(name)s: %(message)s'
         format_no_ts = '[%(levelname)8s] %(name)s: %(message)s'
 
-        log_level = config[ConfMainKey.LOG_LEVEL.value]
-        log_file = config[ConfMainKey.LOG_FILE.value]
-        print_console = config[ConfMainKey.LOG_PRINT.value]
-        runs_as_systemd = config[ConfMainKey.SYSTEMD.value]
+        log_file = Config.get_str(config, ConfMainKey.LOG_FILE)
+        log_level = Config.get_loglevel(config, ConfMainKey.LOG_LEVEL)
+        print_console = Config.get_bool(config, ConfMainKey.LOG_PRINT, False)
+        runs_as_systemd = Config.get_bool(config, ConfMainKey.SYSTEMD, False)
 
         if log_file:
             max_bytes = config[ConfMainKey.LOG_MAX_BYTES.value]
