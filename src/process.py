@@ -22,8 +22,8 @@ class Process:
 
     TIME_STEP = 0.05
 
-    DEFAULT_TIME_INTERVAL = 180
-    DEFAULT_TIME_WARM_UP = 20
+    DEFAULT_TIME_INTERVAL = 145
+    DEFAULT_TIME_WARM_UP = 30
     DEFAULT_TIME_COOL_DOWN = 5
     DEFAULT_COUNT_MEASUREMENTS = 1
     DEFAULT_TIME_BETWEEN_MEASUREMENT = 5
@@ -34,7 +34,7 @@ class Process:
         self._shutdown = False
 
         self._time_counter = 0
-        self._time_interval = self.DEFAULT_TIME_INTERVAL
+        self._time_wait = self.DEFAULT_TIME_INTERVAL
         self._time_warm_up = self.DEFAULT_TIME_WARM_UP
         self._time_cool_down = self.DEFAULT_TIME_COOL_DOWN
 
@@ -57,12 +57,12 @@ class Process:
             raise RuntimeError("initialisation alread done!")
 
         def get_config_float(key, default_value):
-            value = config.get(ConfMainKey.SENSOR_INTERVAL.value)
+            value = config.get(key.value)
             return float(value) if value is not None else default_value
 
-        self._time_interval = get_config_float(config, self._time_interval)
-        self._time_warm_up = get_config_float(config, self._time_warm_up)
-        self._time_cool_down = get_config_float(config, self._time_cool_down)
+        self._time_wait = get_config_float(ConfMainKey.SENSOR_WAIT, self._time_wait)
+        self._time_warm_up = get_config_float(ConfMainKey.SENSOR_WARM_UP_TIME, self._time_warm_up)
+        self._time_cool_down = get_config_float(ConfMainKey.SENSOR_COOL_DOWN_TIME, self._time_cool_down)
 
         self._mqtt = MqttConnector()
         self._mqtt.open(config)
@@ -100,7 +100,7 @@ class Process:
 
                 # may be changed dynamically
                 time_cool_down = self._time_warm_up + self._time_cool_down
-                time_reset = self._time_warm_up + self._time_cool_down + self._time_interval
+                time_reset = self._time_warm_up + self._time_cool_down + self._time_wait
 
                 if self._on_hold:
                     if state == SensorState.START:

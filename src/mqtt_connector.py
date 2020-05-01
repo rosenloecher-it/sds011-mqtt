@@ -1,16 +1,23 @@
 import logging
+import os
+import signal
 import threading
 from queue import Queue, Empty
 
 import paho.mqtt.client as mqtt
 
 from src.config import ConfMainKey, Config
-from src.constant import Constant
 
 _logger = logging.getLogger(__name__)
 
 
 class MqttConnector:
+
+    DEFAULT_MQTT_KEEPALIVE = 60
+    DEFAULT_MQTT_PORT = 1883
+    DEFAULT_MQTT_PORT_SSL = 8883
+    DEFAULT_MQTT_PROTOCOL = 4  # 5==MQTTv5, default: 4==MQTTv311, 3==MQTTv31
+    DEFAULT_MQTT_QUALITY = 1
 
     def __init__(self):
         self._mqtt = None
@@ -24,20 +31,25 @@ class MqttConnector:
         self._message_queue = Queue()  # synchronized
         self._lock = threading.Lock()
 
+        self._stored_thread_rc = 0
+        self._disconnect_error_count = 0
+
     def is_open(self):
+        self.check_connection_error()
+
         with self._lock:
             return self._mqtt and self._open
 
     def open(self, config):
         self._channel = Config.get_str(config, ConfMainKey.MQTT_CHANNEL)
         self._last_will = Config.get_str(config, ConfMainKey.MQTT_LAST_WILL)
-        self._qos = Config.get_int(config, ConfMainKey.MQTT_QUALITY, Constant.DEFAULT_MQTT_QUALITY)
+        self._qos = Config.get_int(config, ConfMainKey.MQTT_QUALITY, self.DEFAULT_MQTT_QUALITY)
         self._retain = Config.get_bool(config, ConfMainKey.MQTT_RETAIN, False)
 
         host = Config.get_str(config, ConfMainKey.MQTT_HOST)
         port = Config.get_int(config, ConfMainKey.MQTT_PORT)
-        protocol = Config.get_int(config, ConfMainKey.MQTT_PROTOCOL, Constant.DEFAULT_MQTT_PROTOCOL)
-        keepalive = Config.get_int(config, ConfMainKey.MQTT_KEEPALIVE, Constant.DEFAULT_MQTT_KEEPALIVE)
+        protocol = Config.get_int(config, ConfMainKey.MQTT_PROTOCOL, self.DEFAULT_MQTT_PROTOCOL)
+        keepalive = Config.get_int(config, ConfMainKey.MQTT_KEEPALIVE, self.DEFAULT_MQTT_KEEPALIVE)
         client_id = Config.get_str(config, ConfMainKey.MQTT_CLIENT_ID)
         ssl_ca_certs = Config.get_str(config, ConfMainKey.MQTT_SSL_CA_CERTS)
         ssl_certfile = Config.get_str(config, ConfMainKey.MQTT_SSL_CERTFILE)
@@ -48,7 +60,7 @@ class MqttConnector:
         user_pwd = Config.get_str(config, ConfMainKey.MQTT_USER_PWD)
 
         if not port:
-            port = Constant.DEFAULT_MQTT_PORT_SSL if is_ssl else Constant.DEFAULT_MQTT_PORT
+            port = self.DEFAULT_MQTT_PORT_SSL if is_ssl else self.DEFAULT_MQTT_PORT
 
         if not host or not client_id:
             raise RuntimeError("mandatory mqtt configuration not found ({}, {})'!".format(
@@ -92,8 +104,17 @@ class MqttConnector:
             else:
                 self.publish(self._last_will)
 
+    def check_connection_error(self):
+        with self._lock:
+            stored_thread_rc = self._stored_thread_rc
+
+        if stored_thread_rc != 0:
+            raise RuntimeError(f"MQTT connection error rc={stored_thread_rc}!")
+
     def get_messages(self):
         messages = []
+
+        self.check_connection_error()
 
         while True:
             try:
@@ -133,16 +154,29 @@ class MqttConnector:
                 _logger.info("successfully connected to MQTT: flags=%s, rc=%s", flags, rc)
             else:
                 self._open = False
+                self._stored_thread_rc = rc
                 _logger.error("connect to MQTT failed: flags=%s, rc=%s", flags, rc)
+                self.check_connection_error()
 
     def _on_disconnect(self, _mqtt_client, _userdata, rc):
         """MQTT callback for when the client disconnects from the MQTT server."""
+        disconnect_error_count = 0
+        disconnect_error_kill_at = 10
+
         with self._lock:
             self._open = False
             if rc == 0:
                 _logger.info("disconnected from MQTT: rc=%s", rc)
             else:
-                _logger.error("Unexpectedly disconnected from MQTT broker: rc=%s", rc)
+                self._disconnect_error_count += 1
+                disconnect_error_count = self._disconnect_error_count
+                self._stored_thread_rc = rc
+                _logger.error("Unexpectedly disconnected from MQTT broker: rc=%s (kill when %s >= %s)",
+                              rc, disconnect_error_count, disconnect_error_kill_at)
+
+        # no way to get out of the process if there is another client with same name
+        if disconnect_error_count >= disconnect_error_kill_at:
+            os.kill(os.getpid(), signal.SIGKILL)
 
     def _on_message(self, mqtt_client, userdata, message):
         """MQTT callback when a message is received from MQTT server"""

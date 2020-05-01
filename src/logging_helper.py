@@ -3,6 +3,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 from src.config import ConfMainKey, Config
+from src.constant import Constant
 
 
 class LoggingHelper:
@@ -20,8 +21,8 @@ class LoggingHelper:
         runs_as_systemd = Config.get_bool(config, ConfMainKey.SYSTEMD, False)
 
         if log_file:
-            max_bytes = config[ConfMainKey.LOG_MAX_BYTES.value]
-            max_count = config[ConfMainKey.LOG_MAX_COUNT.value]
+            max_bytes = Config.get_int(config, ConfMainKey.LOG_MAX_BYTES, Constant.DEFAULT_LOG_MAX_BYTES)
+            max_count = Config.get_int(config, ConfMainKey.LOG_MAX_COUNT, Constant.DEFAULT_LOG_MAX_COUNT)
             handler = RotatingFileHandler(
                 log_file,
                 maxBytes=int(max_bytes),

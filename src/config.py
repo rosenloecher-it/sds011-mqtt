@@ -17,8 +17,9 @@ class ConfMainKey(Enum):
     LOG_PRINT = "log_print"
     SERIAL_PORT = "serial_port"
     SYSTEMD = "systemd"
-    SENSOR_INTERVAL = "sensor_interval"
-    SENSOR_WARMUP_TIME = "sensor_warmup_time"
+    SENSOR_WAIT = "sensor_wait"
+    SENSOR_WARM_UP_TIME = "sensor_warm_up_time"
+    SENSOR_COOL_DOWN_TIME = "sensor_cool_down_time"
     SENSOR_MAX_ERRORS_TO_IGNORE = "sensor_max_errors_to_ignore"
 
     MQTT_CHANNEL = "mqtt_channel"
