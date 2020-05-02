@@ -15,14 +15,21 @@ class ConfMainKey(Enum):
     LOG_MAX_BYTES = "log_max_bytes"
     LOG_MAX_COUNT = "log_max_count"
     LOG_PRINT = "log_print"
+    MOCK_SENSOR = "mock_sensor"
     SERIAL_PORT = "serial_port"
     SYSTEMD = "systemd"
     SENSOR_WAIT = "sensor_wait"
     SENSOR_WARM_UP_TIME = "sensor_warm_up_time"
     SENSOR_COOL_DOWN_TIME = "sensor_cool_down_time"
     SENSOR_MAX_ERRORS_TO_IGNORE = "sensor_max_errors_to_ignore"
+    SENSOR_TEMP_RANGE = "sensor_temperatur_range"
+    SENSOR_HUMI_RANGE = "sensor_humidity_range"
 
-    MQTT_CHANNEL = "mqtt_channel"
+    MQTT_CHANNEL_STATE = "mqtt_channel_state"
+    MQTT_CHANNEL_TEMP = "mqtt_channel_temp"
+    MQTT_CHANNEL_HUMI = "mqtt_channel_humi"
+    MQTT_CHANNEL_HOLD = "mqtt_channel_hold"
+
     MQTT_LAST_WILL = "mqtt_last_will"
     MQTT_QUALITY = "mqtt_quality"
     MQTT_RETAIN = "mqtt_retain"
@@ -98,6 +105,7 @@ class Config:
         handle_cli(ConfMainKey.LOG_MAX_BYTES)
         handle_cli(ConfMainKey.LOG_MAX_COUNT)
         handle_cli(ConfMainKey.LOG_PRINT)
+        handle_cli(ConfMainKey.MOCK_SENSOR, False)
 
     @classmethod
     def create_cli_parser(cls):
@@ -119,6 +127,12 @@ class Config:
             "-l", "--" + ConfMainKey.LOG_LEVEL.value,
             choices=["debug", "info", "warning", "error"],
             help="set log level"
+        )
+        parser.add_argument(
+            "-m", "--" + ConfMainKey.MOCK_SENSOR.value,
+            action="store_true",
+            default=None,
+            help="mocked sensor (debugging purpose)"
         )
         parser.add_argument(
             "-p", "--" + ConfMainKey.LOG_PRINT.value,
@@ -185,6 +199,8 @@ class Config:
                     value = float(value)
                 except ValueError:
                     print("cannot parse {} ({}) as float!".format(key, value))
+
+        return value
 
     @classmethod
     def get_int(cls, config, key_enum, default=None):

@@ -41,7 +41,7 @@ class MqttConnector:
             return self._mqtt and self._open
 
     def open(self, config):
-        self._channel = Config.get_str(config, ConfMainKey.MQTT_CHANNEL)
+        self._channel = Config.get_str(config, ConfMainKey.MQTT_CHANNEL_STATE)
         self._last_will = Config.get_str(config, ConfMainKey.MQTT_LAST_WILL)
         self._qos = Config.get_int(config, ConfMainKey.MQTT_QUALITY, self.DEFAULT_MQTT_QUALITY)
         self._retain = Config.get_bool(config, ConfMainKey.MQTT_RETAIN, False)
@@ -145,6 +145,17 @@ class MqttConnector:
                 qos=self._qos,
                 retain=self._retain
             )
+
+    def subscribe(self, channels):
+        subs_qos = 1  # qos for subscriptions, not used, but neccessary
+        subscriptions = [(s, subs_qos) for s in channels]
+        if subscriptions:
+            result, dummy = self._mqtt.subscribe(subscriptions)
+            if result != mqtt.MQTT_ERR_SUCCESS:
+                text = "could not subscripte to mqtt #{} ({})".format(result, subscriptions)
+                raise RuntimeError(text)
+
+            _logger.info("subscripted to MQTT channels (%s)", channels)
 
     def _on_connect(self, _mqtt_client, _userdata, flags, rc):
         """MQTT callback is called when client connects to MQTT server."""

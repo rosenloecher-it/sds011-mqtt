@@ -7,7 +7,7 @@ from src.config import Config
 from src.logging_helper import LoggingHelper
 from src.process import Process
 
-_logger = logging.getLogger("main")
+_logger = logging.getLogger(__name__)
 
 
 def main():

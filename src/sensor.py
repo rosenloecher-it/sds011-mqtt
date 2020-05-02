@@ -166,3 +166,28 @@ class Sensor:
     def _now(self):
         """overwrite in test to simulate different times"""
         return datetime.datetime.now(tz=get_localzone())
+
+
+class MockSensor(Sensor):
+
+    def __init__(self, config):
+        super().__init__(config)
+
+    def open(self, warm_up: bool = False):
+        _logger.info(f"mocked opened (warm_up={warm_up})")
+
+        if warm_up:
+            self.warm_up()
+
+    def close(self):
+        _logger.info("mocked closed")
+
+    def warm_up(self):
+        _logger.info("mocked warm_up")
+
+    def sleep(self):
+        _logger.info("mocked sleep")
+
+    def measure(self):
+        _logger.info("mocked measure")
+        self._set_measurment(StateValue.OK, 0, 0)
