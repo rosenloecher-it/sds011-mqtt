@@ -6,7 +6,8 @@ from queue import Queue, Empty
 
 import paho.mqtt.client as mqtt
 
-from src.config import ConfMainKey, Config
+from src.config import Config
+from src.config_key import ConfigKey
 
 _logger = logging.getLogger(__name__)
 
@@ -41,30 +42,30 @@ class MqttConnector:
             return self._mqtt and self._open
 
     def open(self, config):
-        self._channel = Config.get_str(config, ConfMainKey.MQTT_CHANNEL_STATE)
-        self._last_will = Config.get_str(config, ConfMainKey.MQTT_LAST_WILL)
-        self._qos = Config.get_int(config, ConfMainKey.MQTT_QUALITY, self.DEFAULT_MQTT_QUALITY)
-        self._retain = Config.get_bool(config, ConfMainKey.MQTT_RETAIN, False)
+        self._channel = Config.get_str(config, ConfigKey.MQTT_CHANNEL_STATE)
+        self._last_will = Config.get_str(config, ConfigKey.MQTT_LAST_WILL)
+        self._qos = Config.get_int(config, ConfigKey.MQTT_QUALITY, self.DEFAULT_MQTT_QUALITY)
+        self._retain = Config.get_bool(config, ConfigKey.MQTT_RETAIN, False)
 
-        host = Config.get_str(config, ConfMainKey.MQTT_HOST)
-        port = Config.get_int(config, ConfMainKey.MQTT_PORT)
-        protocol = Config.get_int(config, ConfMainKey.MQTT_PROTOCOL, self.DEFAULT_MQTT_PROTOCOL)
-        keepalive = Config.get_int(config, ConfMainKey.MQTT_KEEPALIVE, self.DEFAULT_MQTT_KEEPALIVE)
-        client_id = Config.get_str(config, ConfMainKey.MQTT_CLIENT_ID)
-        ssl_ca_certs = Config.get_str(config, ConfMainKey.MQTT_SSL_CA_CERTS)
-        ssl_certfile = Config.get_str(config, ConfMainKey.MQTT_SSL_CERTFILE)
-        ssl_keyfile = Config.get_str(config, ConfMainKey.MQTT_SSL_KEYFILE)
-        ssl_insecure = Config.get_bool(config, ConfMainKey.MQTT_SSL_INSECURE, False)
+        host = Config.get_str(config, ConfigKey.MQTT_HOST)
+        port = Config.get_int(config, ConfigKey.MQTT_PORT)
+        protocol = Config.get_int(config, ConfigKey.MQTT_PROTOCOL, self.DEFAULT_MQTT_PROTOCOL)
+        keepalive = Config.get_int(config, ConfigKey.MQTT_KEEPALIVE, self.DEFAULT_MQTT_KEEPALIVE)
+        client_id = Config.get_str(config, ConfigKey.MQTT_CLIENT_ID)
+        ssl_ca_certs = Config.get_str(config, ConfigKey.MQTT_SSL_CA_CERTS)
+        ssl_certfile = Config.get_str(config, ConfigKey.MQTT_SSL_CERTFILE)
+        ssl_keyfile = Config.get_str(config, ConfigKey.MQTT_SSL_KEYFILE)
+        ssl_insecure = Config.get_bool(config, ConfigKey.MQTT_SSL_INSECURE, False)
         is_ssl = ssl_ca_certs or ssl_certfile or ssl_keyfile
-        user_name = Config.get_str(config, ConfMainKey.MQTT_USER_NAME)
-        user_pwd = Config.get_str(config, ConfMainKey.MQTT_USER_PWD)
+        user_name = Config.get_str(config, ConfigKey.MQTT_USER_NAME)
+        user_pwd = Config.get_str(config, ConfigKey.MQTT_USER_PWD)
 
         if not port:
             port = self.DEFAULT_MQTT_PORT_SSL if is_ssl else self.DEFAULT_MQTT_PORT
 
         if not host or not client_id:
             raise RuntimeError("mandatory mqtt configuration not found ({}, {})'!".format(
-                ConfMainKey.MQTT_HOST.value, ConfMainKey.MQTT_CLIENT_ID.value
+                ConfigKey.MQTT_HOST.value, ConfigKey.MQTT_CLIENT_ID.value
             ))
 
         self._mqtt = mqtt.Client(client_id=client_id, protocol=protocol)

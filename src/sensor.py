@@ -6,7 +6,8 @@ from serial import SerialException
 
 from tzlocal import get_localzone
 
-from src.config import ConfMainKey, Config
+from src.config import Config
+from src.config_key import ConfigKey
 from src.sds011 import SDS011
 
 _logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ class SensorError(RuntimeError):
 
 class Sensor:
 
-    MAX_ERRORS_TO_IGNORE_DEFAULT = 3
+    DEBAULT_IGNORE_N_ERRORS = 5
 
     def __init__(self, config):
         self._sensor = None
@@ -51,12 +52,14 @@ class Sensor:
 
         self._error_ignored = 0
         self._max_errors_to_ignore = Config.get_int(config,
-                                                    ConfMainKey.SENSOR_MAX_ERRORS_TO_IGNORE,
-                                                    self.MAX_ERRORS_TO_IGNORE_DEFAULT)
+                                                    ConfigKey.SENSOR_IGNORE_N_ERRORS,
+                                                    self.DEBAULT_IGNORE_N_ERRORS)
         if self._max_errors_to_ignore < 0:
             self._max_errors_to_ignore = 0xffffffff
 
-        self._port = Config.get_str(config, ConfMainKey.SERIAL_PORT)
+        self._port = Config.get_str(config, ConfigKey.SERIAL_PORT)
+
+        self._set_query_mode = True  # only once
 
     def __del__(self):
         self.close()
@@ -65,7 +68,8 @@ class Sensor:
         self._mqtt = mqtt
 
     def open(self, warm_up: bool = False):
-        self._sensor = SDS011(self._port, use_query_mode=True)
+        use_query_mode = True if self._set_query_mode else None
+        self._sensor = SDS011(self._port, use_query_mode=use_query_mode)
         self._sensor.open()
         self._warmup = False  # don't know the state!
 
@@ -73,6 +77,8 @@ class Sensor:
 
         if warm_up:
             self.warm_up()
+
+        self._set_query_mode = False  # reset
 
     def close(self):
         if self._sensor is not None:

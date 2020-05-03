@@ -52,10 +52,13 @@ class SDS011(object):
             timeout=self._timeout
         )
         self._serial.flush()
-        self.set_report_mode(active=not self._use_query_mode)
+
+        if self._use_query_mode is not None:
+            self.set_report_mode(active=not self._use_query_mode)
 
     def close(self):
         if self._serial is not None:
+            self._serial.flush()
             self._serial.close()
             self._serial = None
 
@@ -69,13 +72,14 @@ class SDS011(object):
 
     def _get_reply(self):
         """Read reply from device."""
-        raw = self._serial.read(size=10)
-        _logger.debug("read(_get_reply): %s", raw)
-        data = raw[2:8]
-        if len(data) == 0:
+        expected = 10
+        raw = self._serial.read(size=expected)
+        _logger.debug("_get_reply: read %s (%s of expected %s)", raw, len(raw) if raw else "-", expected)
+        if len(raw) < 9:
             return None
+        data = raw[2:8]
         if (sum(d for d in data) & 255) != raw[8]:
-            _logger.error("_get_reply checksum error")
+            _logger.error("_get_reply: checksum error")
             return None  # TODO: also check cmd id
         return raw
 
