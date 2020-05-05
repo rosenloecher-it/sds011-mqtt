@@ -53,8 +53,7 @@ class SDS011(object):
         )
         self._serial.flush()
 
-        if self._use_query_mode is not None:
-            self.set_report_mode(active=not self._use_query_mode)
+        self.set_report_mode(active=not self._use_query_mode)
 
     def close(self):
         if self._serial is not None:
@@ -75,7 +74,7 @@ class SDS011(object):
         expected = 10
         raw = self._serial.read(size=expected)
         _logger.debug("_get_reply: read %s (%s of expected %s)", raw, len(raw) if raw else "-", expected)
-        if len(raw) < 9:
+        if len(raw) < 10:
             return None
         data = raw[2:8]
         if (sum(d for d in data) & 255) != raw[8]:

@@ -99,10 +99,14 @@ class RangeSubscription(Subscription):
             _logger.info(f"No subscription value '{self.key.value}' available!")
             return False
 
+        if self.value == "-":
+            _logger.info(f"No value for '{self.key.value}' available!")
+            return False
+
         try:
             float_value = float(self.value)
         except ValueError:
-            _logger.info(f"Cannot '{self.key.value}'.value ({self.value}) to float!")
+            _logger.info(f"Cannot convert '{self.key.value}'.value ({self.value}) to float!")
             return False
 
         if self.min > float_value or float_value > self.max:

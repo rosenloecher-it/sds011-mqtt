@@ -46,9 +46,9 @@ class Process:
         self._humi_range = None
         self._temp_range = None
 
-        self._subs_cmd = OnHoldSubscription(ConfigKey.MQTT_CHANNEL_HOLD)
-        self._subs_humi = RangeSubscription(ConfigKey.MQTT_CHANNEL_HUMI)
-        self._subs_temp = RangeSubscription(ConfigKey.MQTT_CHANNEL_TEMP)
+        self._subs_cmd = OnHoldSubscription(ConfigKey.MQTT_CHANNEL_CMD_HOLD)
+        self._subs_humi = RangeSubscription(ConfigKey.MQTT_CHANNEL_CMD_HUMI)
+        self._subs_temp = RangeSubscription(ConfigKey.MQTT_CHANNEL_CMD_TEMP)
         self._subscriptions = [self._subs_cmd, self._subs_humi, self._subs_temp]
 
         self._on_hold = False
@@ -73,12 +73,12 @@ class Process:
         self._time_warm_up = Config.get_float(config, ConfigKey.SENSOR_WARM_UP_TIME, self._time_warm_up)
         self._time_cool_down = Config.get_float(config, ConfigKey.SENSOR_COOL_DOWN_TIME, self._time_cool_down)
 
-        self._subs_cmd.config(config.get(ConfigKey.MQTT_CHANNEL_HOLD.value))
+        self._subs_cmd.config(config.get(ConfigKey.MQTT_CHANNEL_CMD_HOLD.value))
 
-        self._subs_humi.config(config.get(ConfigKey.MQTT_CHANNEL_HUMI.value))
+        self._subs_humi.config(config.get(ConfigKey.MQTT_CHANNEL_CMD_HUMI.value))
         self._subs_humi.set_range(config.get(ConfigKey.SENSOR_HUMI_RANGE.value) or self.DEFAULT_SENSOR_HUMI_RANGE)
 
-        self._subs_temp.config(config.get(ConfigKey.MQTT_CHANNEL_TEMP.value))
+        self._subs_temp.config(config.get(ConfigKey.MQTT_CHANNEL_CMD_TEMP.value))
         self._subs_temp.set_range(config.get(ConfigKey.SENSOR_TEMP_RANGE.value) or self.DEFAULT_SENSOR_TEMP_RANGE)
 
         self._mqtt = self._create_mqtt_connector(config)
@@ -133,7 +133,8 @@ class Process:
                 if self._on_hold:
                     if state == SensorState.START:
                         self._sensor.open(warm_up=False)
-                        self._mqtt.publish_last_will()
+                        self._sensor.deactivate_measurements()
+                        self._sensor.publish()
                         state = SensorState.COOLING_DOWN
                 else:
                     if state == SensorState.START:

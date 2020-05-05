@@ -24,6 +24,7 @@ class StateValue(Enum):
     OK = "OK"
     OFFLINE = "OFFLINE"
     ERROR = "ERROR"
+    DEACTIVATED = "DEACTIVATED"
 
     def __str__(self):
         return self.__repr__()
@@ -59,8 +60,6 @@ class Sensor:
 
         self._port = Config.get_str(config, ConfigKey.SERIAL_PORT)
 
-        self._set_query_mode = True  # only once
-
     def __del__(self):
         self.close()
 
@@ -68,8 +67,7 @@ class Sensor:
         self._mqtt = mqtt
 
     def open(self, warm_up: bool = False):
-        use_query_mode = True if self._set_query_mode else None
-        self._sensor = SDS011(self._port, use_query_mode=use_query_mode)
+        self._sensor = SDS011(self._port, use_query_mode=True)
         self._sensor.open()
         self._warmup = False  # don't know the state!
 
@@ -77,8 +75,6 @@ class Sensor:
 
         if warm_up:
             self.warm_up()
-
-        self._set_query_mode = False  # reset
 
     def close(self):
         if self._sensor is not None:
@@ -120,6 +116,9 @@ class Sensor:
             ExportKey.TIMESTAMP.value: now.isoformat(),
         }
         _logger.info("measurment: %s", self._measurment)
+
+    def deactivate_measurements(self):
+        self._set_measurment(StateValue.DEACTIVATED, pm10=None, pm25=None)
 
     def measure(self):
         if self._sensor is None:

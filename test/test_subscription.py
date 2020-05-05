@@ -15,7 +15,7 @@ class TestRangeSubscription(unittest.TestCase):
     EXTRACT_MAX = 60
 
     def prepare_extract(self, channel_config):
-        s = RangeSubscription(ConfigKey.MQTT_CHANNEL_HUMI)
+        s = RangeSubscription(ConfigKey.MQTT_CHANNEL_CMD_HUMI)
 
         s.config(channel_config)
         s.set_range((self.EXTRACT_MIN, self.EXTRACT_MAX))
@@ -35,6 +35,9 @@ class TestRangeSubscription(unittest.TestCase):
         self.assertEqual(s.verify(), False)
 
         s.extract("xcayc")  # no number
+        self.assertEqual(s.verify(), False)
+
+        s.extract("-")  # no number
         self.assertEqual(s.verify(), False)
 
         s.extract(str(self.EXTRACT_MIN + 1))
@@ -82,7 +85,7 @@ class TestOnHoldSubscription(unittest.TestCase):
     TEST_ATTR2 = "attr2"
 
     def prepare_extract(self, channel_config):
-        s = OnHoldSubscription(ConfigKey.MQTT_CHANNEL_HOLD)
+        s = OnHoldSubscription(ConfigKey.MQTT_CHANNEL_CMD_HOLD)
 
         s.config(channel_config)
 
