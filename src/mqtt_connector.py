@@ -126,15 +126,20 @@ class MqttConnector:
 
         return messages
 
-    def publish(self, message: str):
+    def publish(self, message: str, channel: str = None, retain: bool = None):
         if not self.is_open:
             raise RuntimeError("mqtt is not connected!")
 
+        if channel is None:
+            channel = self._channel
+        if retain is None:
+            retain = self._retain
+
         self._mqtt.publish(
-            topic=self._channel,
+            topic=channel,
             payload=message,
             qos=self._qos,
-            retain=self._retain
+            retain=retain
         )
         _logger.info("publish: %s", message)
 

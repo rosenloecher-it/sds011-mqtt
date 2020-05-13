@@ -1,40 +1,14 @@
-import datetime
-import json
+import copy
 import logging
-from enum import Enum
-from serial import SerialException
 
-from tzlocal import get_localzone
+from serial import SerialException
 
 from src.config import Config
 from src.config_key import ConfigKey
+from src.result import ResultState, Result
 from src.sds011 import SDS011
 
 _logger = logging.getLogger(__name__)
-
-
-class ExportKey(Enum):
-    PM25 = "PM25"
-    PM10 = "PM10"
-    STATE = "STATE"
-    TIMESTAMP = "TIMESTAMP"
-
-
-class StateValue(Enum):
-    OK = "OK"
-    OFFLINE = "OFFLINE"
-    ERROR = "ERROR"
-    DEACTIVATED = "DEACTIVATED"
-
-    def __str__(self):
-        return self.__repr__()
-
-    def __repr__(self) -> str:
-        return '{}'.format(self.name)
-
-    @classmethod
-    def is_success(cls, state):
-        return state in [cls.CLOSED, cls.OPEN, cls.TILTED]
 
 
 class SensorError(RuntimeError):
@@ -47,9 +21,7 @@ class Sensor:
 
     def __init__(self, config):
         self._sensor = None
-        self._mqtt = None
         self._warmup = False
-        self._measurment = {}
 
         self._error_ignored = 0
         self._max_errors_to_ignore = Config.get_int(config,
@@ -62,9 +34,6 @@ class Sensor:
 
     def __del__(self):
         self.close()
-
-    def set_mqtt(self, mqtt):
-        self._mqtt = mqtt
 
     def open(self, warm_up: bool = False):
         self._sensor = SDS011(self._port, use_query_mode=True)
@@ -106,20 +75,6 @@ class Sensor:
             self._sensor.sleep()
             _logger.debug("sent to sleep")
 
-    def _set_measurment(self, state: StateValue, pm10: float, pm25: float):
-        now = self._now()
-
-        self._measurment = {
-            ExportKey.STATE.value: state.value,
-            ExportKey.PM10.value: pm10,
-            ExportKey.PM25.value: pm25,
-            ExportKey.TIMESTAMP.value: now.isoformat(),
-        }
-        _logger.info("measurment: %s", self._measurment)
-
-    def deactivate_measurements(self):
-        self._set_measurment(StateValue.DEACTIVATED, pm10=None, pm25=None)
-
     def measure(self):
         if self._sensor is None:
             raise SensorError("sensor was not opened!")
@@ -135,7 +90,7 @@ class Sensor:
 
             _logger.error("self._sensor.query() failed!")
             _logger.exception(ex)
-            self._set_measurment(StateValue.ERROR, None, None)
+            return Result(ResultState.ERROR)
         else:
             if result is None:
                 pm25, pm10 = None, None
@@ -148,29 +103,16 @@ class Sensor:
                     raise SensorError(f"{self._error_ignored} wrong measurments!")
 
                 _logger.warning("(ignore) wrong measurment: pm25=%s; pm10=%s!", pm25, pm10)
-                self._set_measurment(StateValue.ERROR, None, None)
+                return Result(ResultState.ERROR)
             else:
-                self._set_measurment(StateValue.OK, pm10=pm10, pm25=pm25)
                 self._error_ignored = 0
+                return Result(ResultState.OK, pm10=pm10, pm25=pm25)
 
     @classmethod
     def check_value(cls, value):
         if value is None:
             return False
         return 0 < value <= 1000
-
-    def publish(self, reset_measurment: bool = True):
-        if self._mqtt is None:
-            raise SensorError("no mqtt set!")
-        if self._measurment:
-            json_text = json.dumps(self._measurment)
-            self._mqtt.publish(json_text)
-        if reset_measurment:
-            self._measurment = {}
-
-    def _now(self):
-        """overwrite in test to simulate different times"""
-        return datetime.datetime.now(tz=get_localzone())
 
 
 class MockSensor(Sensor):
@@ -193,6 +135,10 @@ class MockSensor(Sensor):
     def sleep(self):
         _logger.info("mocked sleep")
 
+    @classmethod
+    def dummy_measure(self):
+        return Result(ResultState.OK, pm10=0, pm25=0)
+
     def measure(self):
         _logger.info("mocked measure")
-        self._set_measurment(StateValue.OK, 0, 0)
+        return self.dummy_measure()

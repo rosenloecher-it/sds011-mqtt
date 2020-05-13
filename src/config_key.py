@@ -18,7 +18,10 @@ class ConfigKey(Enum):
     SENSOR_TEMP_RANGE = "sensor_temperatur_range"
     SENSOR_HUMI_RANGE = "sensor_humidity_range"
 
+    TIME_SWITCHING_ON = "time_switching_on"
+
     MQTT_CHANNEL_STATE = "mqtt_channel_state"
+    MQTT_CHANNEL_SWITCH = "mqtt_channel_switch"
     MQTT_CHANNEL_CMD_TEMP = "mqtt_channel_cmd_temp"
     MQTT_CHANNEL_CMD_HUMI = "mqtt_channel_cmd_humi"
     MQTT_CHANNEL_CMD_HOLD = "mqtt_channel_cmd_hold"
