@@ -213,7 +213,8 @@ class Process:
                         self._publish_measurement(measurement)
                         state = SensorState.COOLING_DOWN
 
-                if state == SensorState.COOLING_DOWN and self._time_counter >= loop_params.tlim_cool_down:
+                if state == SensorState.COOLING_DOWN and \
+                        (self._time_counter >= loop_params.tlim_cool_down or loop_params.on_hold):
                     self._sensor.close(sleep=loop_params.sensor_sleep)
                     state = SensorState.WAITING_FOR_RESET
 
