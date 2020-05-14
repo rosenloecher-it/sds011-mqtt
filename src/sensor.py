@@ -1,5 +1,5 @@
-import copy
 import logging
+import random
 
 from serial import SerialException
 
@@ -17,18 +17,18 @@ class SensorError(RuntimeError):
 
 class Sensor:
 
-    DEBAULT_IGNORE_N_ERRORS = 5
+    DEBAULT_ABORT_AFTER_N_ERRORS = 5
 
     def __init__(self, config):
         self._sensor = None
         self._warmup = False
 
         self._error_ignored = 0
-        self._max_errors_to_ignore = Config.get_int(config,
-                                                    ConfigKey.SENSOR_IGNORE_N_ERRORS,
-                                                    self.DEBAULT_IGNORE_N_ERRORS)
-        if self._max_errors_to_ignore < 0:
-            self._max_errors_to_ignore = 0xffffffff
+        self._abort_after_n_errors = Config.get_int(config,
+                                                    ConfigKey.ABORT_AFTER_N_ERRORS,
+                                                    self.DEBAULT_ABORT_AFTER_N_ERRORS)
+        if self._abort_after_n_errors < 0:
+            self._abort_after_n_errors = 0xffffffff
 
         self._port = Config.get_str(config, ConfigKey.SERIAL_PORT)
 
@@ -45,8 +45,8 @@ class Sensor:
         if warm_up:
             self.warm_up()
 
-    def close(self):
-        if self._sensor is not None:
+    def close(self, sleep=True):
+        if sleep and self._sensor is not None:
             try:
                 self._sensor.sleep()
             except Exception as ex:
@@ -85,7 +85,7 @@ class Sensor:
             result = self._sensor.query()
         except SerialException as ex:
             self._error_ignored += 1
-            if self._error_ignored > self._max_errors_to_ignore:
+            if self._error_ignored > self._abort_after_n_errors:
                 raise SensorError(ex)
 
             _logger.error("self._sensor.query() failed!")
@@ -99,7 +99,7 @@ class Sensor:
 
             if not self.check_value(pm25) or not self.check_value(pm10):
                 self._error_ignored += 1
-                if self._error_ignored > self._max_errors_to_ignore:
+                if self._error_ignored > self._abort_after_n_errors:
                     raise SensorError(f"{self._error_ignored} wrong measurments!")
 
                 _logger.warning("(ignore) wrong measurment: pm25=%s; pm10=%s!", pm25, pm10)
@@ -126,8 +126,8 @@ class MockSensor(Sensor):
         if warm_up:
             self.warm_up()
 
-    def close(self):
-        _logger.info("mocked closed")
+    def close(self, sleep=True):
+        _logger.info(f"mocked closed (sleep={sleep})")
 
     def warm_up(self):
         _logger.info("mocked warm_up")
@@ -137,8 +137,12 @@ class MockSensor(Sensor):
 
     @classmethod
     def dummy_measure(self):
-        return Result(ResultState.OK, pm10=0, pm25=0)
+        return Result(ResultState.OK, pm10=1, pm25=1)
 
     def measure(self):
         _logger.info("mocked measure")
-        return self.dummy_measure()
+        if random.randint(0, 10) > 7:
+            return Result(ResultState.ERROR)
+        else:
+            value = random.randint(1, 300) / 10
+            return Result(ResultState.OK, pm10=value, pm25=value)

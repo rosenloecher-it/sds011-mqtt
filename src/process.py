@@ -8,8 +8,8 @@ from tzlocal import get_localzone
 
 from src.config import Config
 from src.config_key import ConfigKey
-from src.result import Result, ResultState
 from src.mqtt_connector import MqttConnector
+from src.result import Result, ResultState
 from src.sensor import Sensor, MockSensor
 from src.subscription import OnHoldSubscription, RangeSubscription
 
@@ -34,20 +34,39 @@ class SwitchSensor(Enum):
     ON = "ON"
 
 
+class LoopParams:
+
+    def __init__(self):
+        self.use_switch_actor = False
+        self.on_hold = False
+
+        # time limits
+        self.tlim_interval = None
+        self.tlim_switching_on = None
+        self.tlim_warming_up = None
+        self.tlim_cool_down = None
+
+        self.sensor_sleep = True
+
+
 class Process:
 
-    TIME_STEP = 0.05
-
-    DEFAULT_TIME_WARM_UP = 30
     DEFAULT_TIME_COOL_DOWN = 2
-    DEFAULT_TIME_INTERVAL = 180
+    DEFAULT_TIME_INTERVAL_MAX = 180
+    DEFAULT_TIME_INTERVAL_MIN = 15
+    DEFAULT_TIME_STEP = 0.05
+    DEFAULT_TIME_SWITCHING_ON = 7
+    DEFAULT_TIME_WARM_UP = 30
+
     DEFAULT_COUNT_MEASUREMENTS = 1
     DEFAULT_TIME_BETWEEN_MEASUREMENT = 5
 
-    DEFAULT_TIME_SWITCHING_ON = 7
 
     DEFAULT_SENSOR_TEMP_RANGE = (-20, 60)
     DEFAULT_SENSOR_HUMI_RANGE = (0, 70)
+
+    DEFAULT_ADAPTIVE_DUST_UPPER = 80
+    DEFAULT_ADAPTIVE_DUST_LOWER = 10  # µg/m³
 
     NO_SENSOR_CLOSE_BELOW = 15
 
@@ -56,25 +75,33 @@ class Process:
         self._mqtt = None
         self._shutdown = False
 
-        self._time_step = self.TIME_STEP
+        self._time_step = self.DEFAULT_TIME_STEP
         self._time_counter = 0
-        self._time_interval = self.DEFAULT_TIME_INTERVAL
-        self._time_warm_up = self.DEFAULT_TIME_WARM_UP
+
         self._time_cool_down = self.DEFAULT_TIME_COOL_DOWN
+        self._time_interval_max = self.DEFAULT_TIME_INTERVAL_MAX
+        self._time_interval_min = self.DEFAULT_TIME_INTERVAL_MIN
         self._time_switching_on = self.DEFAULT_TIME_SWITCHING_ON
+        self._time_warm_up = self.DEFAULT_TIME_WARM_UP
+
+        # µg/m³
+        self._adaptive_dust_upper = self.DEFAULT_ADAPTIVE_DUST_UPPER
+        self._adaptive_dust_lower = self.DEFAULT_ADAPTIVE_DUST_LOWER
 
         self._humi_range = None
         self._temp_range = None
 
-        self._mqtt_channel_sensor_switch = None
+        self._mqtt_out_actor = None
 
-        self._subs_cmd = OnHoldSubscription(ConfigKey.MQTT_CHANNEL_CMD_HOLD)
-        self._subs_humi = RangeSubscription(ConfigKey.MQTT_CHANNEL_CMD_HUMI)
-        self._subs_temp = RangeSubscription(ConfigKey.MQTT_CHANNEL_CMD_TEMP)
-        self._subscriptions = [self._subs_cmd, self._subs_humi, self._subs_temp]
+        self._mqtt_in_hold = OnHoldSubscription(ConfigKey.MQTT_CHANNEL_IN_HOLD)
+        self._mqtt_in_humi = RangeSubscription(ConfigKey.MQTT_CHANNEL_IN_HUMI)
+        self._mqtt_in_temp = RangeSubscription(ConfigKey.MQTT_CHANNEL_IN_TEMP)
+        self._subscriptions = [self._mqtt_in_hold, self._mqtt_in_humi, self._mqtt_in_temp]
 
-        self._on_hold = False
         self._last_measurement = None
+        self._allow_sensor_sleep = False
+
+        self._deactivation_ranges = None
 
         signal.signal(signal.SIGINT, self._shutdown_gracefully)
         signal.signal(signal.SIGTERM, self._shutdown_gracefully)
@@ -89,20 +116,23 @@ class Process:
         if self._mqtt is not None or self._sensor is not None:
             raise RuntimeError("Initialisation alread done!")
 
-        self._time_interval = Config.get_float(config, ConfigKey.SENSOR_WAIT, self._time_interval)
-        self._time_warm_up = Config.get_float(config, ConfigKey.SENSOR_WARM_UP_TIME, self._time_warm_up)
-        self._time_cool_down = Config.get_float(config, ConfigKey.SENSOR_COOL_DOWN_TIME, self._time_cool_down)
-        self._time_switching_on = Config.get_float(config, ConfigKey.TIME_SWITCHING_ON, self._time_switching_on)
+        self._time_cool_down = Config.get_float(config, ConfigKey.TIME_COOL_DOWN, self._time_cool_down)
+        self._time_interval_max = Config.get_float(config, ConfigKey.TIME_INTERVAL_MAX, self._time_interval_max)
+        self._time_interval_min = Config.get_float(config, ConfigKey.TIME_INTERVAL_MIN, self._time_interval_min)
+        self._time_switching_on = Config.get_float(config, ConfigKey.TIME_WAIT_FOR_ACTOR, self._time_switching_on)
+        self._time_warm_up = Config.get_float(config, ConfigKey.TIME_WARM_UP, self._time_warm_up)
 
-        self._subs_cmd.config(config.get(ConfigKey.MQTT_CHANNEL_CMD_HOLD.value))
+        self._adaptive_dust_upper = self.DEFAULT_ADAPTIVE_DUST_UPPER
+        self._adaptive_dust_lower = self.DEFAULT_ADAPTIVE_DUST_LOWER
+        self._deactivation_ranges = config.get(ConfigKey.DEACTIVATION_TIME_RANGES.value)
 
-        self._subs_humi.config(config.get(ConfigKey.MQTT_CHANNEL_CMD_HUMI.value))
-        self._subs_humi.set_range(config.get(ConfigKey.SENSOR_HUMI_RANGE.value) or self.DEFAULT_SENSOR_HUMI_RANGE)
+        self._mqtt_in_hold.config(config.get(ConfigKey.MQTT_CHANNEL_IN_HOLD.value))
+        self._mqtt_in_humi.config(config.get(ConfigKey.MQTT_CHANNEL_IN_HUMI.value))
+        self._mqtt_in_humi.set_range(config.get(ConfigKey.HUMIDITY_RANGE.value) or self.DEFAULT_SENSOR_HUMI_RANGE)
+        self._mqtt_in_temp.config(config.get(ConfigKey.MQTT_CHANNEL_IN_TEMP.value))
+        self._mqtt_in_temp.set_range(config.get(ConfigKey.TEMPERATURE_RANGE.value) or self.DEFAULT_SENSOR_TEMP_RANGE)
 
-        self._subs_temp.config(config.get(ConfigKey.MQTT_CHANNEL_CMD_TEMP.value))
-        self._subs_temp.set_range(config.get(ConfigKey.SENSOR_TEMP_RANGE.value) or self.DEFAULT_SENSOR_TEMP_RANGE)
-
-        self._mqtt_channel_sensor_switch = config.get(ConfigKey.MQTT_CHANNEL_SWITCH.value)
+        self._mqtt_out_actor = config.get(ConfigKey.MQTT_CHANNEL_OUT_ACTOR.value)
 
         self._mqtt = self._create_mqtt_connector(config)
         self._mqtt.open(config)
@@ -141,30 +171,21 @@ class Process:
 
     def run(self):
         state = SensorState.START
-
-        is_switch_sensor = bool(self._mqtt_channel_sensor_switch)
+        loop_params = None
 
         try:
             self._wait_for_mqtt_connection()
 
             self._reset_timer()  # better testing
             while not self._shutdown:
+
                 if state == SensorState.START:
-                    self._process_mqtt_messages()  # changes: self._on_hold
+                    self._process_mqtt_messages()
+                    loop_params = self._determine_loop_params()
 
-                # may be changed dynamically
-                time_switching_on = self._time_switching_on if is_switch_sensor else 0
-                time_warming_up = self._time_warm_up + time_switching_on
-                time_cool_down = time_warming_up + self._time_cool_down
-
-                diff_reset = self._time_interval - self._time_warm_up + self._time_cool_down - time_switching_on
-                if diff_reset <= 0:
-                    raise ValueError("interval time must be larger then sum up other times!")
-                no_sensor_close = diff_reset < self.NO_SENSOR_CLOSE_BELOW
-
-                if self._on_hold:
+                if loop_params.on_hold:
                     if state == SensorState.START:
-                        if is_switch_sensor:
+                        if loop_params.use_switch_actor:
                             self._switch_sensor(SwitchSensor.OFF)
                             state = SensorState.SWITCHED_OFF
                         else:
@@ -174,30 +195,29 @@ class Process:
                         self._publish_measurement(Result(ResultState.DEACTIVATED))
                 else:
                     if state == SensorState.START:
-                        if is_switch_sensor:
+                        if loop_params.use_switch_actor:
                             self._switch_sensor(SwitchSensor.ON)
                             state = SensorState.SWITCHING_ON
                         else:
                             state = SensorState.CONNECTING
 
-                    if state == SensorState.SWITCHING_ON and self._time_counter >= time_switching_on:
+                    if state == SensorState.SWITCHING_ON and self._time_counter >= loop_params.tlim_switching_on:
                         state = SensorState.CONNECTING
 
                     if state == SensorState.CONNECTING:
                         self._sensor.open(warm_up=True)
                         state = SensorState.WARMING_UP
 
-                    if state == SensorState.WARMING_UP and self._time_counter >= time_warming_up:
-                        self._last_measurement = None
+                    if state == SensorState.WARMING_UP and self._time_counter >= loop_params.tlim_warming_up:
                         measurement = self._sensor.measure()
                         self._publish_measurement(measurement)
                         state = SensorState.COOLING_DOWN
 
-                if state == SensorState.COOLING_DOWN and self._time_counter >= time_cool_down and not no_sensor_close:
-                    self._sensor.close()  # includes sleep
+                if state == SensorState.COOLING_DOWN and self._time_counter >= loop_params.tlim_cool_down:
+                    self._sensor.close(sleep=loop_params.sensor_sleep)
                     state = SensorState.WAITING_FOR_RESET
 
-                if self._time_counter >= self._time_interval:  # any state
+                if self._time_counter >= loop_params.tlim_interval:  # any state
                     self._reset_timer()
                     state = SensorState.START
 
@@ -206,10 +226,84 @@ class Process:
         finally:
             self.close()
 
+    def _determine_loop_params(self):
+        lp = LoopParams()
+
+        if self._active_deactivation_ranges():
+            _logger.info("deactivation range active!")
+            lp.on_hold = True
+
+        if not lp.on_hold:
+            for subscription in self._subscriptions:
+                if not subscription.verify():
+                    lp.on_hold = True
+
+        lp.use_switch_actor = bool(self._mqtt_out_actor)
+
+        # may be changed dynamically
+        lp.tlim_switching_on = self._time_switching_on if lp.use_switch_actor else 0
+        lp.tlim_warming_up = self._time_warm_up + lp.tlim_switching_on
+        lp.tlim_cool_down = lp.tlim_warming_up + self._time_cool_down
+
+        if lp.on_hold:
+            lp.tlim_interval = self._time_interval_max
+        else:
+            lp.tlim_interval = self._calc_interval_time()
+            min_time = self._time_warm_up + self._time_cool_down + lp.tlim_switching_on
+            if min_time > lp.tlim_interval:
+                _logger.debug("adaptive time interval is corrected to %s (%s)", min_time, lp.tlim_interval)
+                lp.tlim_interval = min_time
+
+        if lp.on_hold:
+            lp.sensor_sleep = True
+        else:
+            if not self._allow_sensor_sleep:
+                # first pump humidity out of sensor?!
+                lp.sensor_sleep = False
+            else:
+                diff_reset = lp.tlim_interval - min_time
+                lp.sensor_sleep = diff_reset > self.NO_SENSOR_CLOSE_BELOW
+
+        return lp
+
+    def _calc_interval_time(self):
+        time_interval = self._time_interval_max
+
+        if self._last_measurement is None:
+            return time_interval
+
+        # reset old measurment
+        diff = (self._last_measurement.timestamp - self._now()).total_seconds()
+        if diff > 300:
+            self._last_measurement = None
+            return time_interval
+
+        max_time = self._time_interval_max
+        min_time = self._time_interval_min
+
+        pm_upper = self._adaptive_dust_upper  # µg/m³
+        pm_lower = self._adaptive_dust_lower  # µg/m³
+
+        pm_value = max([self._last_measurement.pm10, self._last_measurement.pm25])
+
+        if pm_value <= pm_lower:
+            time_interval = max_time
+        elif pm_value >= pm_upper:
+            time_interval = min_time
+        else:
+            m = (max_time - min_time) / (pm_lower - pm_upper)
+            n = max_time - m * pm_lower
+            time_interval = m * pm_value + n
+
+        return time_interval
+
     def _publish_measurement(self, measurement):
         measurement.timestamp = self._now()
         if measurement.state == ResultState.OK:
             self._last_measurement = measurement  # store for adaptive intervals
+            if not self._allow_sensor_sleep:
+                self._allow_sensor_sleep = True
+                _logger.debug("allow sensor sleep (at first successful measurement).")
 
         message = measurement.create_message()
         self._mqtt.publish(message)
@@ -242,14 +336,29 @@ class Process:
                 if subscription.matches_topic(message.topic):
                     subscription.extract(payload)
 
-        self._on_hold = False
-        for subscription in self._subscriptions:
-            if not subscription.verify():
-                self._on_hold = True
-
     def _switch_sensor(self, switch_state: SwitchSensor):
-        if self._mqtt_channel_sensor_switch:
-            self._mqtt.publish(switch_state.value, self._mqtt_channel_sensor_switch, True)
+        if self._mqtt_out_actor:
+            self._mqtt.publish(switch_state.value, self._mqtt_out_actor, True)
+
+    def _active_deactivation_ranges(self):
+        if not self._deactivation_ranges:
+            return False
+
+        now = self._now()
+        minute_of_day = now.minute * 60 + now.hour
+
+        try:
+            for range in self._deactivation_ranges:
+                lower = min(range)
+                upper = max(range)
+                if lower <= minute_of_day <= upper:
+                    return True
+        except (TypeError) as ex:
+            _logger.error(f"Iterable[Iterable] expected for '{ConfigKey.DEACTIVATION_TIME_RANGES.value}'!"
+                          " E.g.: '((60,300),(660,900),)'")
+            _logger.exception(ex)
+
+        return False
 
     def _now(self):
         """overwrite in test to simulate different times"""

@@ -42,7 +42,7 @@ class MqttConnector:
             return self._mqtt and self._open
 
     def open(self, config):
-        self._channel = Config.get_str(config, ConfigKey.MQTT_CHANNEL_STATE)
+        self._channel = Config.get_str(config, ConfigKey.MQTT_CHANNEL_OUT_STATE)
         self._last_will = Config.get_str(config, ConfigKey.MQTT_LAST_WILL)
         self._qos = Config.get_int(config, ConfigKey.MQTT_QUALITY, self.DEFAULT_MQTT_QUALITY)
         self._retain = Config.get_bool(config, ConfigKey.MQTT_RETAIN, False)

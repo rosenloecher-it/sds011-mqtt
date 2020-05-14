@@ -1,13 +1,14 @@
 import datetime
+import random
 import unittest
 
 from src.mqtt_connector import MqttConnector
-from src.process import Process, SwitchSensor
+from src.process import Process, SwitchSensor, LoopParams
 
 from unittest.mock import MagicMock
 
 from src.result import ResultState, Result
-from src.sensor import Sensor, MockSensor
+from src.sensor import MockSensor
 
 
 class MockProcess(Process):
@@ -40,10 +41,19 @@ class MockProcess(Process):
 
     def set_loop_count(self, loop_count=1):
         self._time_step = 40
-        self._time_interval = 4 * self._time_step
+        self._time_interval_max = 4 * self._time_step
         self._time_warm_up = 2 * self._time_step
         self._time_cool_down = 0
-        self.time_stop_at = loop_count * self._time_interval + self._time_step
+        self.time_stop_at = loop_count * self._time_interval_max + self._time_step
+
+    def create_dummy_loop_params(self):
+        lp = LoopParams()
+        lp.tlim_interval = self._time_interval_max
+        lp.tlim_switching_on = self._time_switching_on if lp.use_switch_actor else 0
+        lp.tlim_warming_up = self._time_warm_up + lp.tlim_switching_on
+        lp.tlim_cool_down = lp.tlim_warming_up + self._time_cool_down
+
+        return lp
 
     def set_mocked_mqtt(self):
         self._mqtt = MqttConnector()
@@ -88,7 +98,7 @@ class TestProcessLoopStandard(unittest.TestCase):
         message = result.create_message()
 
         for m in process.mqtt_messages:
-            self.assertEqual(m , message)
+            self.assertEqual(m, message)
 
     def test_loop_1(self):
         self.check_loop_running(loop_count=1)
@@ -100,8 +110,13 @@ class TestProcessLoopStandard(unittest.TestCase):
         loop_count = 3
 
         process = MockProcess()
-        process._process_mqtt_messages = lambda *args: None
-        process._on_hold = True
+
+        loop_params = process.create_dummy_loop_params()
+        loop_params.on_hold = True
+
+        process._determine_loop_params = MagicMock()
+        process._determine_loop_params.return_value = loop_params
+
         process.test_open(loop_count=loop_count)
         process.run()
 
@@ -111,13 +126,19 @@ class TestProcessLoopStandard(unittest.TestCase):
         self.assertEqual(process.test_sensor.measure.call_count, 0)
         self.assertEqual(process.test_sensor.close.call_count, loop_count + 1)
 
-    def test_loop_switch_on_hold(self):
+    def test_loop_actor_on_hold(self):
         loop_count = 3
 
         process = MockProcess()
-        process._process_mqtt_messages = lambda *args: None
-        process._on_hold = True
-        process._mqtt_channel_sensor_switch = "mqtt_channel_sensor_switch"
+
+        process._mqtt_out_actor = "_mqtt_channel_sensor_switch"
+
+        loop_params = process.create_dummy_loop_params()
+        loop_params.on_hold = True
+        loop_params.use_switch_actor = True
+
+        process._determine_loop_params = MagicMock()
+        process._determine_loop_params.return_value = loop_params
 
         process.test_open(loop_count=loop_count)
         process.run()
@@ -130,3 +151,92 @@ class TestProcessLoopStandard(unittest.TestCase):
         message = Result(ResultState.DEACTIVATED, timestamp=process._now()).create_message()
         for m in process.mqtt_messages:
             self.assertTrue(m in [message, SwitchSensor.OFF.value])
+
+
+class TestProcessCalcIntervalTime(unittest.TestCase):
+
+    def test_no_measurement(self):
+        time_interval_max = random.random() * 1000
+
+        process = MockProcess()
+
+        process._time_interval_max = time_interval_max
+        process._last_measurement = None
+
+        compare = process._calc_interval_time()
+
+        self.assertEqual(compare, time_interval_max)
+
+    def test_max_time(self):
+        time_interval_max = random.random() * 1000
+
+        process = MockProcess()
+
+        process._time_interval_max = time_interval_max
+        process._last_measurement = Result(ResultState.OK, pm10=1, pm25=1, timestamp=process.now)
+
+        compare = process._calc_interval_time()
+
+        self.assertEqual(compare, time_interval_max)
+
+    def test_min_time(self):
+        time_interval_max = 200 + random.random() * 1000
+        time_interval_min = time_interval_max / 5
+
+        process = MockProcess()
+
+        process._time_interval_max = time_interval_max
+        process._time_interval_min = time_interval_min
+        process._last_measurement = Result(ResultState.OK, pm25=1, timestamp=process.now,
+                                           pm10=process.DEFAULT_ADAPTIVE_DUST_UPPER + 1)
+
+        compare = process._calc_interval_time()
+
+        self.assertEqual(compare, time_interval_min)
+
+    def test_middle(self):
+        time_max = 300
+        time_min = 100
+
+        process = MockProcess()
+        process._time_interval_max = time_max
+        process._time_interval_min = time_min
+
+        dust = (process.DEFAULT_ADAPTIVE_DUST_UPPER + process.DEFAULT_ADAPTIVE_DUST_LOWER) / 2
+        process._last_measurement = Result(ResultState.OK, pm10=dust, pm25=1, timestamp=process.now)
+
+        compare = process._calc_interval_time()
+
+        self.assertAlmostEqual(compare, (time_max + time_min) / 2)
+
+
+class TestProcessDeactivationRanges(unittest.TestCase):
+
+    def test_inactive(self):
+        process = MockProcess()
+        process.now = datetime.datetime(2020, 1, 1, 2, 2, 3, tzinfo=datetime.timezone.utc)
+        process._deactivation_ranges = None
+
+        compare = process._active_deactivation_ranges()
+        self.assertEqual(compare, False)
+
+    def test_active(self):
+        process = MockProcess()
+        process.now = datetime.datetime(2020, 1, 1, 2, 2, 3, tzinfo=datetime.timezone.utc)
+
+        minute_of_day = process.now.minute * 60 + process.now.hour
+
+        process._deactivation_ranges = ((minute_of_day - 3, minute_of_day + 5), (2 * minute_of_day, 3 * minute_of_day))
+        compare = process._active_deactivation_ranges()
+        self.assertEqual(compare, True)
+
+        process._deactivation_ranges = ((2 * minute_of_day, 3 * minute_of_day),)
+        compare = process._active_deactivation_ranges()
+        self.assertEqual(compare, False)
+
+    def test_error(self):
+        process = MockProcess()
+        process._deactivation_ranges = (("h"))
+
+        compare = process._active_deactivation_ranges()
+        self.assertEqual(compare, False)
