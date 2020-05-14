@@ -46,16 +46,17 @@ class Sensor:
             self.warm_up()
 
     def close(self, sleep=True):
-        if sleep and self._sensor is not None:
-            try:
-                self._sensor.sleep()
-            except Exception as ex:
-                _logger.error("self._sensor.sleep() failed")
-                _logger.exception(ex)
+        if self._sensor is not None:
+            if sleep:
+                try:
+                    self._sensor.sleep()
+                except Exception as ex:
+                    _logger.error("self._sensor.sleep() failed")
+                    _logger.exception(ex)
 
             try:
                 self._sensor.close()
-                _logger.debug("closed")
+                _logger.debug(f"closed(sleep={sleep})")
             except Exception as ex:
                 _logger.error("self._sensor.close() failed")
                 _logger.exception(ex)
