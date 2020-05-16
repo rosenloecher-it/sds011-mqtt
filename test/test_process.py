@@ -2,6 +2,8 @@ import datetime
 import random
 import unittest
 
+from tzlocal import get_localzone
+
 from src.mqtt_connector import MqttConnector
 from src.process import Process, SwitchSensor, LoopParams
 
@@ -214,7 +216,7 @@ class TestProcessDeactivationRanges(unittest.TestCase):
 
     def test_inactive(self):
         process = MockProcess()
-        process.now = datetime.datetime(2020, 1, 1, 2, 2, 3, tzinfo=datetime.timezone.utc)
+        process.now = datetime.datetime(2020, 1, 1, 2, 2, 3, tzinfo=get_localzone())
         process._deactivation_ranges = None
 
         compare = process._active_deactivation_ranges()
@@ -222,7 +224,7 @@ class TestProcessDeactivationRanges(unittest.TestCase):
 
     def test_active(self):
         process = MockProcess()
-        process.now = datetime.datetime(2020, 1, 1, 2, 2, 3, tzinfo=datetime.timezone.utc)
+        process.now = datetime.datetime(2020, 1, 1, 2, 2, 3, tzinfo=get_localzone())
 
         minute_of_day = process.now.minute * 60 + process.now.hour
 

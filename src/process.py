@@ -353,6 +353,7 @@ class Process:
                 lower = min(range)
                 upper = max(range)
                 if lower <= minute_of_day <= upper:
+                    _logger.debug(f"deactivation range active [{lower} <= {minute_of_day} <= {upper}]!")
                     return True
         except (TypeError) as ex:
             _logger.error(f"Iterable[Iterable] expected for '{ConfigKey.DEACTIVATION_TIME_RANGES.value}'!"
