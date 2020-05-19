@@ -163,7 +163,7 @@ class TestProcessCalcIntervalTime(unittest.TestCase):
         process = MockProcess()
 
         process._time_interval_max = time_interval_max
-        process._last_measurement = None
+        process._last_result = None
 
         compare = process._calc_interval_time()
 
@@ -175,7 +175,7 @@ class TestProcessCalcIntervalTime(unittest.TestCase):
         process = MockProcess()
 
         process._time_interval_max = time_interval_max
-        process._last_measurement = Result(ResultState.OK, pm10=1, pm25=1, timestamp=process.now)
+        process._last_result = Result(ResultState.OK, pm10=1, pm25=1, timestamp=process.now)
 
         compare = process._calc_interval_time()
 
@@ -189,8 +189,8 @@ class TestProcessCalcIntervalTime(unittest.TestCase):
 
         process._time_interval_max = time_interval_max
         process._time_interval_min = time_interval_min
-        process._last_measurement = Result(ResultState.OK, pm25=1, timestamp=process.now,
-                                           pm10=process.DEFAULT_ADAPTIVE_DUST_UPPER + 1)
+        process._last_result = Result(ResultState.OK, pm25=1, timestamp=process.now,
+                                      pm10=process.DEFAULT_ADAPTIVE_DUST_UPPER + 1)
 
         compare = process._calc_interval_time()
 
@@ -205,7 +205,7 @@ class TestProcessCalcIntervalTime(unittest.TestCase):
         process._time_interval_min = time_min
 
         dust = (process.DEFAULT_ADAPTIVE_DUST_UPPER + process.DEFAULT_ADAPTIVE_DUST_LOWER) / 2
-        process._last_measurement = Result(ResultState.OK, pm10=dust, pm25=1, timestamp=process.now)
+        process._last_result = Result(ResultState.OK, pm10=dust, pm25=1, timestamp=process.now)
 
         compare = process._calc_interval_time()
 

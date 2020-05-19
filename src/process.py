@@ -97,8 +97,7 @@ class Process:
         self._mqtt_in_temp = RangeSubscription(ConfigKey.MQTT_CHANNEL_IN_TEMP)
         self._subscriptions = [self._mqtt_in_hold, self._mqtt_in_humi, self._mqtt_in_temp]
 
-        self._last_measurement = None
-        self._allow_sensor_sleep = False
+        self._last_result = None  # type: Result
 
         self._deactivation_ranges = None
 
@@ -191,7 +190,7 @@ class Process:
                             self._sensor.open(warm_up=False)  # prepare for sending to sleep!
                             state = SensorState.COOLING_DOWN
 
-                        self._publish_measurement(Result(ResultState.DEACTIVATED))
+                        self._handle_result(loop_params, Result(ResultState.DEACTIVATED))
                 else:
                     if state == SensorState.START:
                         if loop_params.use_switch_actor:
@@ -208,8 +207,8 @@ class Process:
                         state = SensorState.WARMING_UP
 
                     if state == SensorState.WARMING_UP and self._time_counter >= loop_params.tlim_warming_up:
-                        measurement = self._sensor.measure()
-                        self._publish_measurement(measurement)
+                        result = self._sensor.measure()
+                        self._handle_result(loop_params, result)
                         state = SensorState.COOLING_DOWN
 
                 if state == SensorState.COOLING_DOWN and \
@@ -256,25 +255,20 @@ class Process:
         if lp.on_hold:
             lp.sensor_sleep = True
         else:
-            if not self._allow_sensor_sleep:
-                # first pump humidity out of sensor?!
-                lp.sensor_sleep = False
-            else:
-                diff_reset = lp.tlim_interval - min_time
-                lp.sensor_sleep = diff_reset > self.NO_SENSOR_CLOSE_BELOW
+            diff_reset = lp.tlim_interval - min_time
+            lp.sensor_sleep = diff_reset > self.NO_SENSOR_CLOSE_BELOW
 
         return lp
 
     def _calc_interval_time(self):
         time_interval = self._time_interval_max
 
-        if self._last_measurement is None:
+        if self._last_result is None or self._last_result.state != ResultState.OK:
             return time_interval
 
         # reset old measurment
-        diff = (self._last_measurement.timestamp - self._now()).total_seconds()
+        diff = (self._last_result.timestamp - self._now()).total_seconds()
         if diff > 300:
-            self._last_measurement = None
             return time_interval
 
         max_time = self._time_interval_max
@@ -283,7 +277,7 @@ class Process:
         pm_upper = self._adaptive_dust_upper  # µg/m³
         pm_lower = self._adaptive_dust_lower  # µg/m³
 
-        pm_value = max([self._last_measurement.pm10, self._last_measurement.pm25])
+        pm_value = max([self._last_result.pm10, self._last_result.pm25])
 
         if pm_value <= pm_lower:
             time_interval = max_time
@@ -296,15 +290,15 @@ class Process:
 
         return time_interval
 
-    def _publish_measurement(self, measurement):
-        measurement.timestamp = self._now()
-        if measurement.state == ResultState.OK:
-            self._last_measurement = measurement  # store for adaptive intervals
-            if not self._allow_sensor_sleep:
-                self._allow_sensor_sleep = True
-                _logger.debug("allow sensor sleep (at first successful measurement).")
+    def _handle_result(self, loop_params, result):
+        result.timestamp = self._now()
+        self._last_result = result
 
-        message = measurement.create_message()
+        if self._last_result and self._last_result.state == ResultState.ERROR:
+            # pump potential humidity out of sensor!?
+            loop_params.sensor_sleep = False
+
+        message = result.create_message()
         self._mqtt.publish(message)
 
     def _wait_for_mqtt_connection(self):
