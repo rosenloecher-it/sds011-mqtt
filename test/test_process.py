@@ -224,9 +224,9 @@ class TestProcessDeactivationRanges(unittest.TestCase):
 
     def test_active(self):
         process = MockProcess()
-        process.now = datetime.datetime(2020, 1, 1, 2, 2, 3, tzinfo=get_localzone())
+        process.now = datetime.datetime(2020, 1, 1, 3, 0, 0, tzinfo=get_localzone())
 
-        minute_of_day = process.now.minute * 60 + process.now.hour
+        minute_of_day = process.now.minute + 60 * process.now.hour
 
         process._deactivation_ranges = ((minute_of_day - 3, minute_of_day + 5), (2 * minute_of_day, 3 * minute_of_day))
         compare = process._active_deactivation_ranges()

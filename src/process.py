@@ -61,7 +61,6 @@ class Process:
     DEFAULT_COUNT_MEASUREMENTS = 1
     DEFAULT_TIME_BETWEEN_MEASUREMENT = 5
 
-
     DEFAULT_SENSOR_TEMP_RANGE = (-20, 60)
     DEFAULT_SENSOR_HUMI_RANGE = (0, 70)
 
@@ -231,7 +230,6 @@ class Process:
         lp = LoopParams()
 
         if self._active_deactivation_ranges():
-            _logger.info("deactivation range active!")
             lp.on_hold = True
 
         if not lp.on_hold:
@@ -346,7 +344,7 @@ class Process:
             return False
 
         now = self._now()
-        minute_of_day = now.minute * 60 + now.hour
+        minute_of_day = now.minute + now.hour * 60
 
         try:
             for range in self._deactivation_ranges:
@@ -355,6 +353,7 @@ class Process:
                 if lower <= minute_of_day <= upper:
                     _logger.debug(f"deactivation range active [{lower} <= {minute_of_day} <= {upper}]!")
                     return True
+
         except (TypeError) as ex:
             _logger.error(f"Iterable[Iterable] expected for '{ConfigKey.DEACTIVATION_TIME_RANGES.value}'!"
                           " E.g.: '((60,300),(660,900),)'")
