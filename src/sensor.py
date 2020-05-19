@@ -100,10 +100,12 @@ class Sensor:
 
             if not self.check_value(pm25) or not self.check_value(pm10):
                 self._error_ignored += 1
-                if self._error_ignored > self._abort_after_n_errors:
+                if self._error_ignored >= self._abort_after_n_errors:
                     raise SensorError(f"{self._error_ignored} wrong measurments!")
 
-                _logger.warning("(ignore) wrong measurment: pm25=%s; pm10=%s!", pm25, pm10)
+                _logger.warning("wrong measurment (ignore %s of %s): pm25=%s; pm10=%s!",
+                                self._error_ignored, self._abort_after_n_errors,
+                                pm25, pm10)
                 return Result(ResultState.ERROR)
             else:
                 self._error_ignored = 0

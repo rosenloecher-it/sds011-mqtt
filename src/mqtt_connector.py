@@ -141,7 +141,7 @@ class MqttConnector:
             qos=self._qos,
             retain=retain
         )
-        _logger.info("publish: %s", message)
+        _logger.info("publish to '%s': %s", channel, message)
 
     def set_last_will(self):
         if self._last_will:
@@ -151,6 +151,7 @@ class MqttConnector:
                 qos=self._qos,
                 retain=self._retain
             )
+            _logger.info("will_set to '%s': %s", self._channel, self._last_will)
 
     def subscribe(self, channels):
         subs_qos = 1  # qos for subscriptions, not used, but neccessary

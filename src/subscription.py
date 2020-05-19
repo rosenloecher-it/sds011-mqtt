@@ -125,7 +125,7 @@ class OnHoldSubscription(Subscription):
         # if self.value is None: => doesn't matter, all fine!
 
         comp = str(self.value).upper().replace(" ", "").replace("_", "")
-        if comp in ["HOLD", "ONHOLD", "TRUE", "1"]:
+        if comp in ["HOLD", "ONHOLD", "TRUE", "STOP", "1"]:
             _logger.info(f"'ON HOLD' by '{self.key.value}'.")
             return False
 

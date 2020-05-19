@@ -64,7 +64,6 @@ class Config:
 
         # list_non_recognized_settings
 
-
     @classmethod
     def create_cli_parser(cls):
         parser = ArgumentParser(
