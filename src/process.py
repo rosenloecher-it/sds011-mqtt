@@ -152,9 +152,8 @@ class Process:
             self._sensor.close()
             self._sensor = None
 
-        self._switch_sensor(SwitchSensor.OFF)
-
         if self._mqtt is not None:
+            self._switch_sensor(SwitchSensor.OFF)
             self._mqtt.close()
             self._mqtt = None
 
@@ -304,7 +303,6 @@ class Process:
     def _wait_for_mqtt_connection(self):
         """wait for getting mqtt connect callback called"""
         self._reset_timer()
-
         while not self._shutdown:
             # make sure mqtt was connected - notified via callback
             if self._time_counter > 15:
@@ -314,6 +312,13 @@ class Process:
             if self._mqtt.is_open():
                 topics = [s.topic for s in self._subscriptions if s.topic]
                 self._mqtt.subscribe(topics)
+                break
+
+        # wait for delivering retained subscribtions
+        self._reset_timer()
+        while not self._shutdown:
+            self._wait(self._time_step)
+            if self._time_counter > 1:
                 break
 
     def _process_mqtt_messages(self):

@@ -36,29 +36,27 @@ class Sensor:
         self.close()
 
     def open(self, warm_up: bool = False):
+        _logger.debug("open(warm_up=%s)", warm_up)
+
         self._sensor = SDS011(self._port, use_query_mode=True)
         self._sensor.open()
         self._warmup = False  # don't know the state!
-
-        _logger.debug("opened")
 
         if warm_up:
             self.warm_up()
 
     def close(self, sleep=True):
+        _logger.debug("close(sleep=%s)", sleep)
         if self._sensor is not None:
             if sleep:
                 try:
                     self._sensor.sleep()
                 except Exception as ex:
-                    _logger.error("self._sensor.sleep() failed")
                     _logger.exception(ex)
 
             try:
                 self._sensor.close()
-                _logger.debug(f"closed(sleep={sleep})")
             except Exception as ex:
-                _logger.error("self._sensor.close() failed")
                 _logger.exception(ex)
             finally:
                 self._sensor = None
@@ -68,7 +66,7 @@ class Sensor:
         if self._sensor:
             self._sensor.sleep(sleep=False)
             self._warmup = True
-            _logger.info("warming up")
+            _logger.debug("warming up")
 
     def sleep(self):
         self._warmup = False
@@ -83,20 +81,21 @@ class Sensor:
             raise SensorError("sensor was not warmed up before measurement!")
 
         try:
-            result = self._sensor.query()
+            measurement = self._sensor.query()
         except SerialException as ex:
             self._error_ignored += 1
             if self._error_ignored > self._abort_after_n_errors:
                 raise SensorError(ex)
 
-            _logger.error("self._sensor.query() failed!")
+            _logger.error("self._sensor.query() failed, but ignore %s of %s!",
+                          self._error_ignored, self._abort_after_n_errors)
             _logger.exception(ex)
             return Result(ResultState.ERROR)
         else:
-            if result is None:
+            if measurement is None:
                 pm25, pm10 = None, None
             else:
-                pm25, pm10 = result
+                pm25, pm10 = measurement
 
             if not self.check_value(pm25) or not self.check_value(pm10):
                 self._error_ignored += 1
