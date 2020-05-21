@@ -97,7 +97,7 @@ class Sensor:
             else:
                 pm25, pm10 = measurement
 
-            if not self.check_value(pm25) or not self.check_value(pm10):
+            if not self.check_measurement(pm10=pm10, pm25=pm25):
                 self._error_ignored += 1
                 if self._error_ignored >= self._abort_after_n_errors:
                     raise SensorError(f"{self._error_ignored} wrong measurments!")
@@ -111,10 +111,16 @@ class Sensor:
                 return Result(ResultState.OK, pm10=pm10, pm25=pm25)
 
     @classmethod
-    def check_value(cls, value):
-        if value is None:
+    def check_measurement(cls, pm25, pm10):
+        if pm25 is None or pm10 is None:
             return False
-        return 0 < value <= 1000
+        if not 0 <= pm25 <= 1000 or not 0 <= pm10 <= 1000:
+            return False
+        # these typical I get over and over again, can't be rigth
+        # pm25 == 25.8 and pm10 == 0.1
+        if pm10 == 0.1 and 25.0 < pm25 < 27.0:
+            return False
+        return True
 
 
 class MockSensor(Sensor):
