@@ -113,13 +113,14 @@ class TestProcessLoopStandard(unittest.TestCase):
 
         process = MockProcess()
 
+        process.test_open(loop_count=loop_count)
+
         loop_params = process.create_dummy_loop_params()
         loop_params.on_hold = True
 
         process._determine_loop_params = MagicMock()
         process._determine_loop_params.return_value = loop_params
 
-        process.test_open(loop_count=loop_count)
         process.run()
 
         self.assertEqual(process.test_sensor.open.call_count, loop_count)
@@ -135,14 +136,14 @@ class TestProcessLoopStandard(unittest.TestCase):
 
         process._mqtt_out_actor = "_mqtt_channel_sensor_switch"
 
+        process.test_open(loop_count=loop_count)
+
         loop_params = process.create_dummy_loop_params()
         loop_params.on_hold = True
         loop_params.use_switch_actor = True
-
         process._determine_loop_params = MagicMock()
         process._determine_loop_params.return_value = loop_params
 
-        process.test_open(loop_count=loop_count)
         process.run()
 
         self.assertEqual(0, process.test_sensor.open.call_count)
