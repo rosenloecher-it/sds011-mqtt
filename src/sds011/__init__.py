@@ -57,7 +57,6 @@ class SDS011(object):
 
     def close(self):
         if self._serial is not None:
-            self._serial.flush()
             self._serial.close()
             self._serial = None
 
