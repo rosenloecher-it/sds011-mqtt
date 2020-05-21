@@ -42,6 +42,7 @@ class LoopParams:
 
         # time limits
         self.tlim_interval = None
+        self.tlim_interval_min = None
         self.tlim_switching_on = None
         self.tlim_warming_up = None
         self.tlim_cool_down = None
@@ -241,20 +242,21 @@ class Process:
         lp.tlim_switching_on = self._time_switching_on if lp.use_switch_actor else 0
         lp.tlim_warming_up = self._time_warm_up + lp.tlim_switching_on
         lp.tlim_cool_down = lp.tlim_warming_up + self._time_cool_down
+        lp.tlim_interval_min = self._time_warm_up + self._time_cool_down + lp.tlim_switching_on
 
         if lp.on_hold:
             lp.tlim_interval = self._time_interval_max
         else:
             lp.tlim_interval = self._calc_interval_time()
-            min_time = self._time_warm_up + self._time_cool_down + lp.tlim_switching_on
-            if min_time > lp.tlim_interval:
-                _logger.debug("adaptive time interval is corrected to %s (%s)", min_time, lp.tlim_interval)
-                lp.tlim_interval = min_time
+            if lp.tlim_interval_min > lp.tlim_interval:
+                _logger.debug("adaptive time interval is corrected to %s (%s)",
+                              lp.tlim_interval_min, lp.tlim_interval)
+                lp.tlim_interval = lp.tlim_interval_min
 
         if lp.on_hold:
             lp.sensor_sleep = True
         else:
-            diff_reset = lp.tlim_interval - min_time
+            diff_reset = lp.tlim_interval - lp.tlim_interval_min
             lp.sensor_sleep = diff_reset > self.NO_SENSOR_CLOSE_BELOW
 
         return lp
@@ -296,6 +298,8 @@ class Process:
         if self._last_result and self._last_result.state == ResultState.ERROR:
             # pump potential humidity out of sensor!?
             loop_params.sensor_sleep = False
+            # quick retry
+            loop_params.tlim_interval = loop_params.tlim_interval_min
 
         message = result.create_message()
         self._mqtt.publish(message)
