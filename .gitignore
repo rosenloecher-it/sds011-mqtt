@@ -42,6 +42,6 @@ __work__/
 
 # misc
 *.log
-enocean-mqtt-bridge.yaml
-enocean-mqtt-bridge.service
+sds011-mqtt*.yaml
+sds011-mqtt.service
 

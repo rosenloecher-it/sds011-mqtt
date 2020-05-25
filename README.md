@@ -1,43 +1,55 @@
-# sds011-mqtt
+# SDS011-MQTT
 
-Forwards Enocean messages from a USB gateway to a MQTT broker. Not implemented is the direction back to the Enocean
-USB gateway (due to missing devices).
-
-It's implemented as python script and supposed to run as systemd service (handling restart, logging)
+... is a Linux Python script/service to control the fine dust sensor SDS011 via MQTT. 
 
 
-### Tested and supported Enocean devices
+## Motivation 
 
-- windows/door handle Eltako FFG7B-rw (nearly identical to Eltako TF-FGB)
+The goal was to put the sensor outside under the roof and control it from inside with a Raspberry Pi. Therefor the USB connection was replaced with Bluetooth (through the wall).
+
+The measurements are published to a MQTT server, from where it can be processed further. 
+
+The measurements should reflect when my neighbor fires his wood stove especially private waste combustion, so that I can switch off my air-handling system of my house before the smell (not the fume) is spread all over.
+
+  ![Screenshot Grafana](./doc/fume-grafana.png)
+
+Some further information about my motivation can be found [here](./docs/MOTIVATION.md).
 
 
-### Enocean USB gateway
+## Features
 
-The script is based on [Enocean(-Lib)](enocean-lib). Check out if there are some limitations. Hopefully all available
-devices will do. (Tested with a DOSMUNG Gateway USB Stick with SMA Port, chipset TCM 310.)
+The sensor was easily to control as long it was inside a room and connected via USB. As soon the sensor was mounted under the roof, problems occurred. The main problem seems to be humidity. 
 
+The sensor is specified up to 70% humidity, which you reach in middle Europa in every normal night. Above th limits the sensor would stop without any clear information. There are no error codes, you get just nothing. Even if the humidity got within the limits, the sensor wouldn't start delivering measurements. I had to switch off/on the power manually. In the end, I put much more effort into this project and added more features than I had anticipated. So it's not so lean any more as intended.
 
-### Additional features
-
-- configurable MQTT last will / testament
-  (e.g. an "OFFLINE" status can be predefined at MQTT level for connection interrupts)
-- check sensor state based on repeated messages and send an configurable OFFLINE message if the device is silent
-  for a configurable timeout.
-- supports different message handler (see for samples in [sds011-mqtt.yaml.sample](./sds011-mqtt.yaml.sample)):
-    - logging: just write Enocean message to logfile or console
-    - generic: just sends what could be extracted
-    - "Eltako FFG7B-rw"-specific JSON: tranform states to: OPEN, CLOSED, TILTED, OFFLINE, ERROR and last change time
-- Live cycle management (restarts) are supposed to be handled by systemd.
+It does:
+- Controls a SDS011 fine dust sensor
+- Trigger measurement in configurable intervals (Option for adaptive measurement intervals to detect dust peaks)
+- Deliver measurements as JSON to MQTT
+- Send sensor to sleep after measurements
+- Option to switch on/off the sensor by an external power relay via MQTT command (separate control channel)
+- Automatic deactivation of sensor  
+    - If humidity/temperature exceeds configured limits (provide humidity/temperature via MQTT).
+    - for specific time ranges (configuration)
+    - via MQTT command channel (set to "HOLD" by smart home system)
+- Operation system: Linux incl. Raspbian for Raspberry Pi
+- systemd service script provided
+- Programmed with Python 3.6
 
 
 ## Startup
 
-### Get access to USB stick
+### prepare connection
+
+In case you connect the sensor via USB you may need to set some permissions:  
 ```bash
 # enable access to Enocean USB stick (alternative set user mode directly)
 sudo usermod -a -G dialout $USER
 # logout & login
 ```
+
+I connect it via Bluetooth. See my notes [here](./docs/BLUETROOTH.md).
+
 
 ### Test working MQTT broker (here Mosquitto)
 ```bash
@@ -82,40 +94,17 @@ python --version
 pip install -r requirements.txt
 ```
 
-### Configuration
-
-```bash
-# cd ... goto project dir
-
-cp ./sds011-mqtt.yaml.sample ./sds011-mqtt.yaml
-```
-
-Edit your `sds011-mqtt.yaml`. See comments too.
-
-Choose one of the available devices (modules pathes), which will handle Enocean message differently:
-- `src.device.log_device.LogDevice`: Log/print messages as it is.
-- `src.device.generic_device.GenericDevice`: Forward messages as it is.
-- `src.device.eltako_ffg7b_device.EltakoFFG7BDevice`
-    - specific to "Eltako FFG7B-rw" devices; creates JSON
-    - tranform states to (STATUS): OPEN, CLOSED, TILTED, OFFLINE, ERROR
-    - "SINCE" contains th last change time
-    - example
-        ```
-        {
-            "STATUS": "CLOSED",
-            "RSSI": -61,
-            "TIMESTAMP": "2020-03-16T21:09:37.205911+01:00",
-            "SINCE": "2020-03-15T19:09:37.205911+01:00"
-        }
-        ```
 
 ### Run
 
 ```bash
+# prepare your own config file based on ./sds011-mqtt.yaml.sample . See comments!
+cp ./sds011-mqtt.yaml.sample ./sds011-mqtt.yaml
+
 # see command line options
 ./sds011-mqtt.sh --help
 
-# prepare your own config file based on ./sds011-mqtt.yaml.sample
+# run
 ./sds011-mqtt.sh -p -c ./sds011-mqtt.yaml
 ```
 
@@ -126,6 +115,7 @@ cp ./sds011-mqtt.service.sample ./sds011-mqtt.service
 
 # edit/adapt pathes and user in sds011-mqtt.service
 vi ./sds011-mqtt.service
+# configure optional `ExecStartPre` commands. e.g. prepareing a serial Bluetooth port
 
 # install service
 sudo cp ./sds011-mqtt.service /etc/systemd/system/
@@ -143,15 +133,14 @@ journalctl -u sds011-mqtt
 sudo systemctl enable sds011-mqtt.service
 ```
 
-## Troubleshouting
 
-There happend some very quick connects/disconnects from/to MQTT broker (Mosquitto) on a Raspberry Pi. The connection
-was secured only by certificate. The problem went away after configuring user name and password for the MQTT broker.
-On a Ubunutu system all was working fine even without user and password.
+## Troubleshooting
+
+There happened some very quick connects/disconnects from/to MQTT broker (Mosquitto) on a Raspberry Pi. The connection was secured only by certificate. The problem went away after configuring user name and password for the MQTT broker. On a Ubuntu system all was working fine even without user and password.
 
 `sudo service sds011-mqtt status`
 
-Mar 18 06:22:18 roofpi systemd[1]: sds011-mqtt.service: Current command vanished from the unit file, execution of the command list won't be resumed.
+Mar 18 06:22:18 server systemd[1]: sds011-mqtt.service: Current command vanished from the unit file, execution of the command list won't be resumed.
 
 ```
 sudo systemctl disable sds011-mqtt.service
@@ -172,7 +161,7 @@ sudo systemctl enable sds011-mqtt.service
 
 ## Maintainer & License
 
-GPLv3 © [Raul Rosenlöcher](https://github.com/rosenloecher-it)
+MIT © [Raul Rosenlöcher](https://github.com/rosenloecher-it)
 
 The code is available at [GitHub][home].
 

@@ -8,22 +8,32 @@
 # - systemd
 
 # "-p" (== --print) makes logging obsolet (espcically if you running a systemd service)
-# log_file:             "./enocean_mqtt_bridge.log"
-log_level:              "info"  # values: debug, info, warning, error
-# log_max_bytes:        1048576  # default
-# log_max_count:        10       # default
+# log_file:                 "./enocean_mqtt_bridge.log"
+log_level:                  "info"  # values: debug, info, warning, error
+# log_max_bytes:            1048576  # default
+# log_max_count:            10       # default
 
 # check USB port with `lsusb` and `dmesg | grep -i "usb"`
-serial_port:            "/dev/ttyUSB0"  # Bluetooth "/dev/rfcomm0"
+serial_port:                "/dev/ttyUSB0"  # Bluetooth "/dev/rfcomm0"
+
+time_interval_max:          180     # standard time between measurments
+time_interval_min:          60      # time between measurments at high dust values
+time_warm_up:               25      # time to warm up (fan) the sensor before taking measurements
 
 # see https://pypi.org/project/paho-mqtt/
-mqtt_client_id:         "hostname-sds011-mqtt"
-mqtt_host:              "<your_server>"
-mqtt_port:              1883  # integer
-mqtt_last_will:         '{"STATE: "OFFLINE", "INFO": "last will"}'
-# mqtt_keepalive:       60  # integer
-# mqtt_protocol:        4  # 3==MQTTv31, (default:) 4==MQTTv311, 5==default/MQTTv5,
-# mqtt_ssl_ca_certs:    "/etc/mosquitto/certs/ca.crt"
-# mqtt_insecure_ssl:    True
-# mqtt_user_name:       "<your_user_name>"
-# mqtt_user_pwd:        "<your_password>"
+mqtt_client_id:             "hostname-sds011-mqtt"
+mqtt_host:                  "<your_server>"
+mqtt_port:                  1883  # integer
+# mqtt_protocol:            4  # 3==MQTTv31, (default:) 4==MQTTv311, 5==default/MQTTv5,
+# mqtt_ssl_ca_certs:        "/etc/mosquitto/certs/ca.crt"
+# mqtt_insecure_ssl:        True
+# mqtt_user_name:           "<your_user_name>"
+# mqtt_user_pwd:            "<your_password>"
+mqtt_last_will:             '{"STATE: "OFFLINE", "INFO": "last will"}'
+
+mqtt_retain:                True
+mqtt_channel_out_actor:     "test/weather/finedust-power/cmd"
+mqtt_channel_out_state:     "test/finedust/state"
+mqtt_channel_in_hold:       "test/finedust/hold"
+mqtt_channel_in_humi:       "test/finedust/humi"
+mqtt_channel_in_temp:       ~
