@@ -13,7 +13,7 @@ The measurements should reflect when my neighbor fires his wood stove especially
 
   ![Screenshot Grafana](./doc/fume-grafana.png)
 
-Some further information about my motivation can be found [here](./docs/MOTIVATION.md).
+Some further information about my motivation can be found [here](./doc/MOTIVATION.md).
 
 
 ## Features
@@ -48,7 +48,7 @@ sudo usermod -a -G dialout $USER
 # logout & login
 ```
 
-I connect it via Bluetooth. See my notes [here](./docs/BLUETROOTH.md).
+I connect it via Bluetooth. See my notes [here](./doc/BLUETOOTH.md).
 
 
 ### Test working MQTT broker (here Mosquitto)
