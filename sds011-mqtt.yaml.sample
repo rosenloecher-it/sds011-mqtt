@@ -14,11 +14,18 @@ log_level:                  "info"  # values: debug, info, warning, error
 # log_max_count:            10       # default
 
 # check USB port with `lsusb` and `dmesg | grep -i "usb"`
-serial_port:                "/dev/ttyUSB0"  # Bluetooth "/dev/rfcomm0"
+serial_port:                "/dev/ttyUSB0"  # Bluetooth similar to: "/dev/rfcomm0"
 
 time_interval_max:          180     # standard time between measurments
 time_interval_min:          60      # time between measurments at high dust values
 time_warm_up:               25      # time to warm up (fan) the sensor before taking measurements
+
+# after 10 errose the script is aborted, usually systemd waits 5min and starts again
+abort_after_n_errors:       10
+
+deactivation_time_ranges:   [[0,300],]  # [t_min_from, t_min_to], deactivate from 0:00 to 5:00 o'clock
+temperatur_range:           [-20,60]    # sensor would be deactivated if a MQTT temperature channel was configured
+humidity_range:             [0,70]      # sensor is deactivated when outside 0-70% humitidy
 
 # see https://pypi.org/project/paho-mqtt/
 mqtt_client_id:             "hostname-sds011-mqtt"
@@ -36,4 +43,4 @@ mqtt_channel_out_actor:     "test/weather/finedust-power/cmd"
 mqtt_channel_out_state:     "test/finedust/state"
 mqtt_channel_in_hold:       "test/finedust/hold"
 mqtt_channel_in_humi:       "test/finedust/humi"
-mqtt_channel_in_temp:       ~
+mqtt_channel_in_temp:       ~           # means: nothing
