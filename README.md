@@ -5,24 +5,23 @@
 
 ## Motivation 
 
-The goal was to put the sensor outside under the roof and control it from inside with a Raspberry Pi. Therefor the USB connection was replaced with Bluetooth (through the wall).
+The fine dust measurements should reflect when my neighbor fires his wood stove, so that I can switch off my air-handling system of my house before the smell (not the fume) is spread all over.
 
-The measurements are published to a MQTT server, from where it can be processed further. 
+  ![Screen shot Grafana](./doc/fume-grafana.png)
 
-The measurements should reflect when my neighbor fires his wood stove especially private waste combustion, so that I can switch off my air-handling system of my house before the smell (not the fume) is spread all over.
+In theory the idea works. In the Grafana screen shot you see an heating period. Some more information about that topic can be found [here](./doc/MOTIVATION.md).
 
-  ![Screenshot Grafana](./doc/fume-grafana.png)
+Controlling the sensor is not much intellectual work, but in practice it didn't work so easily. The sensor was located outside and exposed up to 100% humidity. This lead to several problems, where the sensor refused to work. You could put the sensor back to a room and all worked fine again. The solution was an alternating working mode, where the sensor fan drys the sensor or if it doesn't help the whole sensor is restarted via an external power switch.
 
-Some further information about my motivation can be found [here](./doc/MOTIVATION.md).
+By the way, the sensor was put outside under the roof and controlled by a Raspberry Pi from inside. Therefor the USB connection was replaced with Bluetooth (through the wall). See my notes [here](./doc/BLUETOOTH.md).
+
+The measurements are published to a MQTT server, from where it can be processed further. [MQTT](https://en.wikipedia.org/wiki/MQTT) is an open, standardized, publish-subscribe network protocol that transports messages between different systems. Among others the smart home systems  [OpenHAB](https://www.openhab.org/) and [Node-RED](https://nodered.org/) support it.
+
+
 
 
 ## Features
 
-The sensor was easily to control as long it was inside a room and connected via USB. As soon the sensor was mounted under the roof, problems occurred. The main problem seems to be humidity. 
-
-The sensor is specified up to 70% humidity, which you reach in middle Europa in every normal night. Above th limits the sensor would stop without any clear information. There are no error codes, you get just nothing. Even if the humidity got within the limits, the sensor wouldn't start delivering measurements. I had to switch off/on the power manually. In the end, I put much more effort into this project and added more features than I had anticipated. So it's not so lean any more as intended.
-
-It does:
 - Controls a SDS011 fine dust sensor
 - Trigger measurement in configurable intervals (Option for adaptive measurement intervals to detect dust peaks)
 - Deliver measurements as JSON to MQTT
