@@ -39,6 +39,10 @@ class Subscription(abc.ABC):
     def matches_topic(self, topic: str) -> bool:
         return topic == self.topic
 
+    def missing_value(self) -> bool:
+        """signal that waiting for notifications"""
+        return self.value is None
+
     def extract(self, payload: str) -> bool:
         """Extracts message data"""
 

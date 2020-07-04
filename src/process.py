@@ -39,6 +39,7 @@ class LoopParams:
     def __init__(self):
         self.use_switch_actor = False
         self.on_hold = False
+        self.missing_subscriptions = False
 
         # time limits
         self.tlim_interval = None
@@ -168,8 +169,9 @@ class Process:
         self._time_counter = 0
 
     def run(self):
-        state = SensorState.START
+        first_meassurement = True
         loop_params = None
+        state = SensorState.START
 
         try:
             self._wait_for_mqtt_connection()
@@ -190,7 +192,9 @@ class Process:
                             self._sensor.open(warm_up=False)  # prepare for sending to sleep!
                             state = SensorState.COOLING_DOWN
 
-                        self._handle_result(loop_params, Result(ResultState.DEACTIVATED))
+                        # skip the first deativation message, hopefully all subscriptions are complete the next time
+                        if not first_meassurement or not loop_params.missing_subscriptions:
+                            self._handle_result(loop_params, Result(ResultState.DEACTIVATED))
                 else:
                     if state == SensorState.START:
                         if loop_params.use_switch_actor:
@@ -217,6 +221,7 @@ class Process:
                     state = SensorState.WAITING_FOR_RESET
 
                 if self._time_counter >= loop_params.tlim_interval:  # any state
+                    first_meassurement = False
                     self._reset_timer()
                     state = SensorState.START
 
@@ -235,6 +240,8 @@ class Process:
             for subscription in self._subscriptions:
                 if not subscription.verify():
                     lp.on_hold = True
+                    if subscription.missing_value():
+                        lp.missing_subscriptions = True
 
         lp.use_switch_actor = bool(self._mqtt_out_actor)
 
