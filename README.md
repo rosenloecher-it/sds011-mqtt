@@ -2,8 +2,8 @@
 
 ... is a Linux Python script/service to control the fine dust sensor SDS011 via MQTT. 
 
-**Discontinued:** The code worked fine. But 3 sensors broke down after 2 to 5 weeks. There seems to be problems with humidity. 
-In the end the sensor report all time the same measurements, which cannnot be true.  
+**Discontinued:** The code worked fine. But 3 sensors broke down after 2 to 5 weeks (outside under roof). There seems to be problems with humidity. 
+In the end the sensor reported all time the same measurements, which cannnot be true.  
 
 
 ## Motivation 
