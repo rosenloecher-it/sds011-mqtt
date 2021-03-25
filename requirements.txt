@@ -1,6 +1,6 @@
 paho-mqtt == 1.5.0
 py-dateutil == 2.2
 pyserial == 3.4
-pyyaml == 5.3
+pyyaml == 5.4
 tzlocal == 2.0
 
