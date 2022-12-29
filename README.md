@@ -1,4 +1,4 @@
-# SDS011-MQTT
+# SDS011-MQTT (discontinued)
 
 ... is a Linux Python script/service to control the fine dust sensor SDS011 via MQTT. 
 
